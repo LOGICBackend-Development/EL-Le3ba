@@ -3,6 +3,7 @@ import {
   auth, db, firebaseConfig, ADMIN_EMAIL, teamEmail, fmt, elapsedOf, finishChallenge, cleanSlots,
   blobToB64, b64ToBlob, writeChunks, readChunks, deleteChunks, esc, toast, beep, pointsFor,
   DEFAULT_SETTINGS, DEFAULT_CHALLENGES, TEAM_COLORS, compressImage, loadHostPhoto, DEFAULT_MOUTH,
+  authErrorText,
 } from "./common.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
@@ -35,20 +36,31 @@ $("#admForm").addEventListener("submit", async (e) => {
   e.preventDefault();
   $("#admErr").textContent = "";
   try { await signInWithEmailAndPassword(auth, $("#admEmail").value.trim(), $("#admPass").value); }
-  catch { $("#admErr").textContent = "الإيميل أو الباسورد غلط"; }
+  catch (err) { console.error(err); $("#admErr").textContent = authErrorText(err, tr("الإيميل أو الباسورد غلط")); }
 });
 $("#btnOut").onclick = () => signOut(auth);
 
+let wasIn = false;
 onAuthStateChanged(auth, async (u) => {
   unsubs.forEach((f) => f()); unsubs = []; clearInterval(timerInt);
-  if (!u) { $("#login").hidden = false; $("#app").hidden = true; return; }
-  if (u.email !== ADMIN_EMAIL) {
+  if (!u) {
+    if (wasIn) $("#admErr").textContent = "You were logged out. Another El Le3ba tab on this browser (probably the team page) logged you out — close it and log in again.";
+    wasIn = false;
+    $("#login").hidden = false; $("#app").hidden = true; return;
+  }
+  wasIn = true;
+  if ((u.email || "").toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
     await signOut(auth);
     $("#admErr").textContent = "الحساب ده مش أدمن";
     return;
   }
   $("#login").hidden = true; $("#app").hidden = false;
-  try { await ensureDefaults(); } catch (e) { console.error(e); toast("راجع الـ Firestore rules والإيميل في firebase-config.js", "bad"); }
+  try { await ensureDefaults(); } catch (e) {
+    console.error(e);
+    if (!auth.currentUser) return; // logged out meanwhile — message shown above
+    $("#dbErr").hidden = false;
+    $("#dbErr").textContent = `Database refused the first setup (${e.code || e.name}): ${e.message}. Signed in as ${u.email}. Check Firestore → Rules was published with ${ADMIN_EMAIL}.`;
+  }
   subscribe();
 });
 

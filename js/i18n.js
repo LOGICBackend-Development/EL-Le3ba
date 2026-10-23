@@ -31,6 +31,7 @@ const EN = {
   "اسم المستخدم أو الباسورد غلط": "Wrong username or password", "متأكدين إنكم عايزين تخرجوا؟": "Are you sure you want to log out?",
   "ده حساب الأدمن — افتح صفحة admin.html": "This is the admin account — open admin.html",
   "الحساب ده مش متسجل كفريق": "This account isn't registered as a team",
+  "افتح صفحة الأدمن": "Open the admin page",
   "✅ {name}: +{pts} نقطة": "✅ {name}: +{pts} pts", "❌ {name}: معدّاش… على التحدي الجاي": "❌ {name}: failed… on to the next one",
   "الدليل اترفض ❌ معاكم فرصة أخيرة": "Evidence declined ❌ you have one last chance",
   "⏰ الوقت خلص! معاكم فرصة أخيرة": "⏰ Time's up! One last chance",

@@ -237,11 +237,53 @@ let hostCache = { ver: null, p: null };
 export async function loadHostPhoto(host) {
   if (!host || !host.chunks) return null;
   if (hostCache.ver !== host.ver) {
-    const url = URL.createObjectURL(b64ToBlob(await readChunks("media/host", host.chunks), host.mime || "image/jpeg"));
+    const url = await getMediaBlobUrl("media/host", host.chunks, host.mime || "image/jpeg", host.ver);
     const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
     hostCache = { ver: host.ver, p: { url, W: img.naturalWidth, H: img.naturalHeight } };
   }
   const { url, W, H } = hostCache.p;
   const m = { ...DEFAULT_MOUTH, ...host };
   return { url, W, H, mx: m.mx * W, my: m.my * H, mw: m.mw * W };
+}
+
+/* ---------- readable login errors ---------- */
+export function authErrorText(err, fallback) {
+  const c = err?.code || "";
+  const map = {
+    "auth/invalid-credential": fallback, "auth/wrong-password": fallback, "auth/user-not-found": fallback,
+    "auth/invalid-login-credentials": fallback,
+    "auth/invalid-email": "Email format is not valid",
+    "auth/operation-not-allowed": "Email/Password sign-in is OFF → Firebase → Authentication → Sign-in method → enable Email/Password",
+    "auth/unauthorized-domain": `This website (${location.hostname}) isn't allowed → Firebase → Authentication → Settings → Authorized domains → add it`,
+    "auth/api-key-not-valid.-please-pass-a-valid-api-key.": "Firebase config is wrong → check js/firebase-config.js",
+    "auth/invalid-api-key": "Firebase config is wrong → check js/firebase-config.js",
+    "auth/network-request-failed": "No internet connection — try again",
+    "auth/too-many-requests": "Too many attempts — wait a minute and try again",
+    "auth/user-disabled": "This account is disabled in Firebase",
+  };
+  return (map[c] ?? fallback) + (c ? `  (${c})` : "");
+}
+
+/* ---------- media cache: memory → phone storage (Cache API) → database ---------- */
+const memMedia = new Map(), inflight = new Map();
+const CACHE_NAME = "le3ba-media-v1";
+export async function getMediaBlobUrl(path, n, mime, ver) {
+  if (!n) return null;
+  const key = `${path}?v=${ver || 0}`;
+  if (memMedia.has(key)) return memMedia.get(key);
+  if (inflight.has(key)) return inflight.get(key);
+  const job = (async () => {
+    const req = `https://le3ba.cache/${key}`;
+    let blob = null, cache = null;
+    try { cache = await caches.open(CACHE_NAME); const hit = await cache.match(req); if (hit) blob = await hit.blob(); } catch { /* no Cache API */ }
+    if (!blob) {
+      blob = b64ToBlob(await readChunks(path, n), mime);
+      try { await cache?.put(req, new Response(blob, { headers: { "Content-Type": mime } })); } catch { /* storage full */ }
+    }
+    const url = URL.createObjectURL(blob);
+    memMedia.set(key, url);
+    return url;
+  })().finally(() => inflight.delete(key));
+  inflight.set(key, job);
+  return job;
 }

@@ -1,7 +1,8 @@
 import { t as tr } from "./i18n.js";
 import {
   auth, db, ADMIN_EMAIL, teamEmail, fmt, elapsedOf, allocate, finishChallenge,
-  blobToB64, b64ToBlob, writeChunks, readChunks, esc, toast, beep, compressImage, rankSort, rankingHtml, loadHostPhoto,
+  blobToB64, b64ToBlob, writeChunks, readChunks, esc, toast, beep, compressImage, rankSort, rankingHtml, loadHostPhoto, getMediaBlobUrl,
+  authErrorText,
 } from "./common.js";
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
@@ -28,14 +29,20 @@ const activeChallenges = () => challenges.filter((c) => c.active !== false);
 $("#ringFg").style.strokeDasharray = RING_C;
 
 /* ================= AUTH ================= */
+function showAdminHint() {
+  $("#loginErr").innerHTML = `${esc(tr("ده حساب الأدمن — افتح صفحة admin.html"))}<br><a class="btn btn-ghost btn-sm" style="margin-top:8px" href="admin.html">${esc(tr("افتح صفحة الأدمن"))} →</a>`;
+}
 $("#loginForm").addEventListener("submit", async (e) => {
   e.preventDefault();
   $("#loginErr").textContent = "";
   const btn = e.submitter; if (btn) btn.disabled = true;
+  const who = $("#lgUser").value.trim();
+  if (who.toLowerCase() === ADMIN_EMAIL.toLowerCase()) { showAdminHint(); if (btn) btn.disabled = false; return; }
   try {
-    await signInWithEmailAndPassword(auth, teamEmail($("#lgUser").value), $("#lgPass").value.trim());
+    await signInWithEmailAndPassword(auth, teamEmail(who), $("#lgPass").value.trim());
   } catch (err) {
-    $("#loginErr").textContent = "اسم المستخدم أو الباسورد غلط";
+    console.error(err);
+    $("#loginErr").textContent = authErrorText(err, tr("اسم المستخدم أو الباسورد غلط"));
   } finally { if (btn) btn.disabled = false; }
 });
 $("#btnLogout").onclick = async () => { if (confirm(tr("متأكدين إنكم عايزين تخرجوا؟"))) await signOut(auth); };
@@ -44,8 +51,8 @@ onAuthStateChanged(auth, async (u) => {
   teardown();
   if (!u) { $("#topbar").hidden = true; show("login"); return; }
   if (u.email === ADMIN_EMAIL) {
-    await signOut(auth);
-    $("#loginErr").textContent = "ده حساب الأدمن — افتح صفحة admin.html";
+    // Admin is signed in on this browser: never sign them out from the team page.
+    $("#topbar").hidden = true; show("login"); showAdminHint();
     return;
   }
   const snap = await getDoc(doc(db, "teams", u.uid)).catch(() => null);
@@ -60,6 +67,7 @@ onAuthStateChanged(auth, async (u) => {
   unsubs.push(onSnapshot(tRef(), (s) => { prevTeam = team; team = s.data() || null; announce(); render(); }));
   unsubs.push(onSnapshot(query(collection(db, "challenges"), orderBy("order")), (s) => {
     challenges = s.docs.map((d) => ({ id: d.id, ...d.data() })); render();
+    setTimeout(preloadMedia, 1200);
   }));
   heartbeat();
   hbTimer = setInterval(heartbeat, 60000);
@@ -233,13 +241,26 @@ async function getMediaUrl(cid, kind) {
   const n = kind === "video" ? ch?.videoChunks : ch?.audioChunks;
   if (!ch || !n) return null;
   const ver = kind === "video" ? ch.videoVer : ch.audioVer;
-  const k = `${cid}:${kind}:${ver}`;
-  if (audioCache.has(k)) return audioCache.get(k);
   const path = kind === "video" ? `media/${cid}_v` : `media/${cid}`;
   const mime = kind === "video" ? ch.videoMime || "video/mp4" : ch.audioMime || "audio/mpeg";
-  const url = URL.createObjectURL(b64ToBlob(await readChunks(path, n), mime));
-  audioCache.set(k, url);
-  return url;
+  return getMediaBlobUrl(path, n, mime, ver);
+}
+
+// Download every voice note / video in the background so each challenge opens instantly.
+let preloadKey = "", preloading = false; // eslint-disable-line
+async function preloadMedia() {
+  const list = activeChallenges().filter((c) => c.audioChunks || c.videoChunks);
+  const key = list.map((c) => `${c.id}:${c.audioVer}:${c.videoVer}`).join("|");
+  if (!list.length || key === preloadKey || preloading) return;
+  preloading = true; preloadKey = key;
+  // current / next challenge first
+  const cur = team?.current?.cid;
+  list.sort((a, b) => (b.id === cur) - (a.id === cur));
+  for (const c of list) {
+    if (!uid) break;
+    try { await getMediaUrl(c.id, c.videoChunks ? "video" : "audio"); } catch (e) { console.warn("preload", c.id, e); }
+  }
+  preloading = false;
 }
 
 async function setupIntro() {

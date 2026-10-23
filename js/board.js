@@ -1,4 +1,5 @@
-import { auth, db, ADMIN_EMAIL, esc, rankSort, rankingHtml } from "./common.js";
+import { auth, db, ADMIN_EMAIL, esc, rankSort, rankingHtml, authErrorText } from "./common.js";
+import { t as tr } from "./i18n.js";
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { doc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
@@ -9,7 +10,7 @@ let settings = null, teams = [], challenges = [], unsubs = [];
 $("#bForm").addEventListener("submit", async (e) => {
   e.preventDefault();
   try { await signInWithEmailAndPassword(auth, $("#bEmail").value.trim(), $("#bPass").value); }
-  catch { $("#bErr").textContent = "الإيميل أو الباسورد غلط"; }
+  catch (err) { console.error(err); $("#bErr").textContent = authErrorText(err, tr("الإيميل أو الباسورد غلط")); }
 });
 $("#btnFs").onclick = () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.());
 
