@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#06062a">
+<title>اللعبة — LOGIC</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+Bhaijaan+2:wght@500;700;800&family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body class="team-app">
+
+<header id="topbar" class="topbar" hidden>
+  <div class="tb-hello">
+    <img src="assets/logo.webp" alt="" class="tb-logo">
+    <div><small>أهلاً يا</small><b id="tName"></b></div>
+  </div>
+  <div class="tb-actions">
+    <button class="icon-btn lang-btn" data-lang-toggle></button>
+    <button id="btnBoard" class="icon-btn" title="الترتيب">🏆</button>
+    <button id="btnLogout" class="icon-btn" title="خروج">⏻</button>
+  </div>
+  <div class="stat-row">
+    <div class="stat-tile t-pink"><span class="st-ic">★</span><div><b id="tScore">0</b><small>نقطة</small></div></div>
+    <div class="stat-tile t-peach"><span class="st-ic">✔</span><div><b id="tDone">0/6</b><small>تحديات</small></div></div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- LOGIN -->
+  <section class="screen" id="scr-login">
+    <button class="icon-btn lang-btn corner" data-lang-toggle></button>
+    <div class="brand"><img src="assets/logo.webp" alt="اللعبة — The Game" class="emblem"><div class="by">LOGIC EVENTS</div></div>
+    <form id="loginForm" class="card">
+      <label>اسم المستخدم<input id="lgUser" autocomplete="username" autocapitalize="none" required dir="ltr" placeholder="team01"></label>
+      <label>الباسورد<input id="lgPass" type="password" autocomplete="current-password" required dir="ltr"></label>
+      <button class="btn btn-red btn-xl" type="submit">ادخل اللعبة</button>
+      <p id="loginErr" class="err"></p>
+    </form>
+  </section>
+
+  <!-- LOBBY -->
+  <section class="screen" id="scr-lobby" hidden>
+    <div class="hero">
+      <div class="stage" id="avLobby"></div>
+      <h2 class="center">جاهزين يا <span id="lobbyTeam" class="grad-text"></span>؟</h2>
+      <p class="center mut">إنتوا جوه اللعبة. استنوا إشارة البداية…</p>
+      <div class="pulse-dots"><i></i><i></i><i></i></div>
+    </div>
+    <div class="card howto">
+      <h3>إزاي تلعبوا</h3>
+      <ol class="steps">
+        <li><span class="t-violet">🎧</span>اسمعوا رسالة المضيف</li>
+        <li><span class="t-pink">⏱</span>خلّصوا التحدي قبل الوقت</li>
+        <li><span class="t-peach">📸</span>صوّروا الدليل وابعتوه</li>
+        <li><span class="t-violet">🏆</span>كل ما تخلّصوا أسرع، نقطكم أكتر</li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- WAITING FOR A FREE CHALLENGE -->
+  <section class="screen" id="scr-wait" hidden>
+    <div class="hero center-col">
+      <div class="spinner"></div>
+      <h2 class="center">استعدوا…</h2>
+      <p class="center mut" id="waitMsg">بنجهزلكم التحدي الجاي</p>
+    </div>
+  </section>
+
+  <!-- INTRO: host + voice note -->
+  <section class="screen" id="scr-intro" hidden>
+    <div class="hero">
+      <div class="hero-top"><span class="chip">التحدي الجاي</span><span class="qpill js-prog">1/6</span></div>
+      <h1 class="ch-title" id="introName"></h1>
+      <div class="stage" id="avIntro"></div>
+      <p class="hero-desc" id="introDesc"></p>
+    </div>
+    <div class="stack">
+      <button id="btnPlayVN" class="btn btn-ghost btn-xl">▶ اسمعوا الرسالة</button>
+      <button id="btnStart" class="btn btn-red btn-xl" disabled>يلا نبدأ ⏱</button>
+      <p class="center mut small" id="introHint">لازم تسمعوا الرسالة الأول</p>
+    </div>
+  </section>
+
+  <!-- PLAYING -->
+  <section class="screen" id="scr-playing" hidden>
+    <div class="hero">
+      <div class="hero-top"><span class="chip" id="playAttempt"></span><span class="qpill js-prog">1/6</span></div>
+      <h1 class="ch-title" id="playName"></h1>
+      <div class="timer-wrap" id="timerWrap">
+        <svg viewBox="0 0 200 200" class="ring">
+          <defs><linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#8f4fe0"/><stop offset=".5" stop-color="#f0609a"/><stop offset="1" stop-color="#f7c48a"/></linearGradient></defs>
+          <circle cx="100" cy="100" r="90" class="ring-bg"/>
+          <circle cx="100" cy="100" r="90" class="ring-fg" id="ringFg"/>
+        </svg>
+        <div class="timer" id="timer">12:00</div>
+      </div>
+    </div>
+
+    <div class="card evidence">
+      <div class="card-head"><h3>الدليل</h3><small class="mut">صوّروا أول ما تخلّصوا</small></div>
+      <div class="ev-btns">
+        <label class="tile t-pink"><span class="tile-ic">📷</span><b>صورة</b><small>من الكاميرا</small><input type="file" id="inPhoto" accept="image/*" capture="environment" hidden></label>
+        <button class="tile t-violet" id="btnRecord" type="button"><span class="tile-ic">🎥</span><b>فيديو</b><small>30 ثانية</small></button>
+        <label class="tile t-peach"><span class="tile-ic">📁</span><b>من الجهاز</b><small>صورة أو فيديو</small><input type="file" id="inGallery" accept="image/*,video/*" hidden></label>
+      </div>
+      <div id="evPreview" class="ev-preview"></div>
+      <button id="btnSubmit" class="btn btn-red btn-xl" disabled>ابعتوا الدليل 🚀</button>
+    </div>
+  </section>
+
+  <!-- PENDING APPROVAL -->
+  <section class="screen" id="scr-pending" hidden>
+    <div class="hero center-col">
+      <div class="spinner"></div>
+      <h2 class="center">الدليل وصل 📨</h2>
+      <p class="center mut">الوقت واقف… مستنيين حكم الأدمن</p>
+      <div id="upWrap" class="progress" hidden><div id="upBar"></div></div>
+    </div>
+  </section>
+
+  <!-- RETRY -->
+  <section class="screen" id="scr-retry" hidden>
+    <div class="hero">
+      <div class="hero-top"><span class="chip warn">❤️ فرصة أخيرة</span><span class="qpill js-prog">1/6</span></div>
+      <h1 class="ch-title" id="retryName"></h1>
+      <div class="stage" id="avRetry"></div>
+      <p class="center">معاكم <b class="grad-text" id="retryMin">2</b> دقيقة بس. لو معدّتوش هتتنقلوا للتحدي الجاي.</p>
+    </div>
+    <button id="btnRetry" class="btn btn-red btn-xl">ابدأوا الفرصة الأخيرة ⏱</button>
+  </section>
+
+  <!-- DONE ALL CHALLENGES -->
+  <section class="screen" id="scr-done" hidden>
+    <div class="hero center-col">
+      <div class="big-emoji">🏁</div>
+      <h2 class="center">خلّصتوا كل التحديات!</h2>
+      <div class="final-score"><span id="doneScore">0</span><small>نقطة</small></div>
+    </div>
+    <ul class="results" id="doneList"></ul>
+  </section>
+
+  <!-- GAME ENDED -->
+  <section class="screen" id="scr-ended" hidden>
+    <div class="hero center-col">
+      <img src="assets/logo.webp" alt="" class="emblem sm">
+      <h2 class="center">اللعبة خلصت</h2>
+      <div class="final-score"><span id="endScore">0</span><small>نقطة</small></div>
+    </div>
+    <ul class="results" id="endList"></ul>
+  </section>
+</main>
+
+<!-- full-screen host while the message plays -->
+<div id="theater" class="theater" hidden>
+  <div class="th-stage" id="thStage"></div>
+  <video id="thVideo" playsinline preload="auto" hidden></video>
+  <div class="th-top"><span class="chip" id="thName"></span><button id="thClose" class="icon-btn" title="قفل">✕</button></div>
+  <div class="th-bottom"><div class="eq"><i></i><i></i><i></i><i></i><i></i></div></div>
+</div>
+
+<div id="countdown" class="countdown" hidden><span id="cdNum">3</span></div>
+
+<div id="resultFx" class="result-fx" hidden>
+  <canvas id="confetti"></canvas>
+  <div class="rfx-box">
+    <div class="rfx-emoji" id="rfxEmoji"></div>
+    <h2 id="rfxTitle"></h2>
+    <div class="rfx-pts" id="rfxPts"></div>
+    <p class="mut" id="rfxSub"></p>
+    <small class="mut">دوسوا عشان تكمّلوا</small>
+  </div>
+</div>
+
+<div id="pausedOverlay" class="overlay" hidden>
+  <div class="overlay-box"><div class="big-emoji">⏸</div><h2>اللعبة واقفة</h2><p class="mut">الوقت متجمد… استنوا الإشارة</p></div>
+</div>
+
+<div id="recModal" class="modal" hidden>
+  <div class="modal-box">
+    <video id="recVideo" playsinline muted></video>
+    <div class="rec-bar"><span id="recTime" class="rec-time">00:30</span></div>
+    <div class="stack">
+      <button id="recBtn" class="btn btn-red btn-xl">⏺ ابدأ التصوير</button>
+      <button id="recClose" class="btn btn-ghost">إلغاء</button>
+    </div>
+  </div>
+</div>
+
+<div id="lbModal" class="modal" hidden>
+  <div class="modal-box lb-box">
+    <h2 class="center">🏆 الترتيب</h2>
+    <div id="lbList"></div>
+    <button id="lbClose" class="btn btn-ghost">قفل</button>
+  </div>
+</div>
+
+<div id="toasts"></div>
+<script type="module" src="js/i18n.js"></script>
+<script type="module" src="js/team.js"></script>
+</body>
+</html>

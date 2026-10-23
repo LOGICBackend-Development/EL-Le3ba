@@ -1,0 +1,36 @@
+rules_version = '2';
+// Admin: admin@logic.com (same as js/firebase-config.js)
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAdmin() { return request.auth != null && request.auth.token.email == 'admin@logic.com'; }
+    function signedIn() { return request.auth != null; }
+
+    match /settings/{d}   { allow read: if signedIn(); allow write: if isAdmin(); }
+    match /challenges/{d} { allow read: if signedIn(); allow write: if isAdmin(); }
+    match /media/{d} {
+      allow read: if signedIn(); allow write: if isAdmin();
+      match /chunks/{c} { allow read: if signedIn(); allow write: if isAdmin(); }
+    }
+    match /credentials/{d} { allow read, write: if isAdmin(); }
+    match /presence/{uid}  { allow read: if isAdmin(); allow write: if isAdmin() || request.auth.uid == uid; }
+
+    match /teams/{uid} {
+      allow read: if signedIn();
+      allow create, delete: if isAdmin();
+      // a team can move itself through the game, but can never touch its own score or name
+      allow update: if isAdmin() || (request.auth != null && request.auth.uid == uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['current', 'done', 'results', 'finished']));
+    }
+
+    // which team is inside which challenge
+    match /state/{d} { allow read, write: if signedIn(); }
+
+    match /submissions/{sid} {
+      allow read: if isAdmin();
+      allow create: if signedIn() && request.resource.data.teamId == request.auth.uid
+                    && request.resource.data.status == 'pending';
+      allow update, delete: if isAdmin();
+      match /chunks/{c} { allow create: if signedIn(); allow read, delete: if isAdmin(); }
+    }
+  }
+}

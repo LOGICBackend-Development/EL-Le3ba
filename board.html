@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#07070a">
+<title>اللعبة — الترتيب</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+Bhaijaan+2:wght@500;700;800&family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body class="board-app">
+
+<section id="login" class="wrap">
+  <button class="icon-btn lang-btn corner" data-lang-toggle></button>
+  <div class="brand"><img src="assets/logo.webp" alt="اللعبة" class="emblem"><div class="by">LEADERBOARD</div></div>
+  <form id="bForm" class="card">
+    <p class="mut small">ادخل بحساب الأدمن على الجهاز اللي متوصل بالشاشة</p>
+    <label>الإيميل<input id="bEmail" type="email" required dir="ltr"></label>
+    <label>الباسورد<input id="bPass" type="password" required dir="ltr"></label>
+    <button class="btn btn-red btn-xl" type="submit">افتح الشاشة</button>
+    <p id="bErr" class="err"></p>
+  </form>
+</section>
+
+<div id="board" hidden>
+  <header class="board-head">
+    <img src="assets/logo.webp" alt="" class="emblem board-emblem">
+    <div class="board-sub"><h1 id="bTitle" class="board-title">الترتيب</h1><span class="pill" id="bStatus"></span></div>
+    <button class="icon-btn lang-btn" data-lang-toggle></button>
+    <button id="btnFs" class="icon-btn" title="ملء الشاشة">⛶</button>
+  </header>
+  <div id="bList" class="board-rank"></div>
+</div>
+
+<div id="hiddenScreen" class="overlay hidden-lb" hidden>
+  <div class="overlay-box">
+    <img src="assets/logo.webp" alt="" class="emblem">
+    <h2>الترتيب مخفي</h2>
+    <p class="mut">النتيجة هتتكشف قريب…</p>
+  </div>
+</div>
+
+<script type="module" src="js/i18n.js"></script>
+<script type="module" src="js/board.js"></script>
+</body>
+</html>

@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#07070a">
+<title>اللعبة — الأدمن</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+Bhaijaan+2:wght@500;700;800&family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body class="admin-app">
+
+<section id="login" class="wrap">
+  <button class="icon-btn lang-btn corner" data-lang-toggle></button>
+  <div class="brand"><img src="assets/logo.webp" alt="اللعبة" class="emblem"><div class="by">ADMIN</div></div>
+  <form id="admForm" class="card">
+    <label>الإيميل<input id="admEmail" type="email" required dir="ltr" autocomplete="username"></label>
+    <label>الباسورد<input id="admPass" type="password" required dir="ltr" autocomplete="current-password"></label>
+    <button class="btn btn-red btn-xl" type="submit">دخول</button>
+    <p id="admErr" class="err"></p>
+  </form>
+</section>
+
+<div id="app" hidden>
+  <header class="adm-head">
+    <div class="adm-brand"><img src="assets/logo.webp" alt="" class="adm-logo"><span class="pill" id="statusPill"></span></div>
+    <nav class="tabs">
+      <button data-tab="control" class="on">التحكم</button>
+      <button data-tab="subs">الأدلة <span class="count" id="subBadge" hidden>0</span></button>
+      <button data-tab="challenges">التحديات</button>
+      <button data-tab="teams">الفرق</button>
+      <button data-tab="settings">الإعدادات</button>
+    </nav>
+    <div class="adm-tools">
+      <button class="icon-btn lang-btn" data-lang-toggle></button>
+      <button id="btnNotif" class="icon-btn" title="تفعيل التنبيهات">🔔</button>
+      <a href="board.html" target="_blank" class="icon-btn" title="شاشة الترتيب">📺</a>
+      <button id="btnOut" class="icon-btn" title="خروج">⏻</button>
+    </div>
+  </header>
+
+  <main class="adm-main">
+    <!-- CONTROL -->
+    <section class="tab" id="tab-control">
+      <div class="ctrl-bar card">
+        <div class="ctrl-btns">
+          <button id="btnStartS" class="btn btn-green">▶ ابدأ / كمّل</button>
+          <button id="btnPauseS" class="btn btn-warn">⏸ وقّف</button>
+          <button id="btnEndS" class="btn btn-ghost">🏁 إنهاء اللعبة</button>
+          <button id="btnResetS" class="btn btn-ghost danger">↺ ريست كامل</button>
+        </div>
+        <div class="ctrl-info">
+          <div class="stat"><small>متصلين</small><b id="onlineCount">0/0</b></div>
+          <div class="stat"><small>أدلة مستنية</small><b id="pendingCount" class="gold">0</b></div>
+          <label class="switch big"><input type="checkbox" id="lbToggle"><span>إظهار الترتيب</span></label>
+        </div>
+      </div>
+      <h3 class="sec-title">التحديات دلوقتي</h3>
+      <div id="stationMap" class="stations"></div>
+      <h3 class="sec-title">الفرق</h3>
+      <div id="teamGrid" class="tgrid"></div>
+    </section>
+
+    <!-- SUBMISSIONS -->
+    <section class="tab" id="tab-subs" hidden>
+      <div id="subEmpty" class="empty">مفيش أدلة مستنية ✨</div>
+      <div id="subList" class="sublist"></div>
+    </section>
+
+    <!-- CHALLENGES -->
+    <section class="tab" id="tab-challenges" hidden>
+      <p class="mut small">الـ VN بيتشغل للفريق full screen مع الشخصية. يفضّل MP3 أو M4A (أقصى 4MB). ولو عندك فيديو أفاتار جاهز (HeyGen / D-ID) ارفعه MP4 (أقصى 15MB) وهيتشغل بداله.</p>
+      <div id="chList"></div>
+      <button id="btnAddCh" class="btn btn-ghost">+ تحدي جديد</button>
+    </section>
+
+    <!-- TEAMS -->
+    <section class="tab" id="tab-teams" hidden>
+      <div class="card">
+        <h3>تجهيز الفرق</h3>
+        <div class="row">
+          <label class="sm">عدد الفرق<input id="teamCount" type="number" min="1" max="40" value="6"></label>
+          <button id="btnGenTeams" class="btn btn-red">جهّز الفرق</button>
+          <button id="btnPrint" class="btn btn-ghost">🖨 اطبع كروت الدخول</button>
+        </div>
+        <p class="mut small">بيعمل حسابات جديدة لحد ما يوصل للعدد ده. الحسابات الموجودة بتفضل زي ما هي.</p>
+      </div>
+      <div class="table-wrap">
+        <table class="tbl">
+          <thead><tr><th></th><th>اسم الفريق</th><th>اليوزر</th><th>الباسورد</th><th>النقط</th><th></th></tr></thead>
+          <tbody id="teamRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section class="tab" id="tab-settings" hidden>
+      <div class="card" id="hostCard">
+        <h3>شخصية المضيف</h3>
+        <p class="mut small">ارفع صورة الشخصية (نسختك المرخّصة) ودوس مرة واحدة على بقّه في الصورة. البق والدقن هيتحركوا مع الـ VN. من غير صورة هتشتغل الشخصية المرسومة.</p>
+        <div class="row">
+          <label class="btn btn-ghost">🖼 ارفع صورة<input type="file" accept="image/*" id="hostFile" hidden></label>
+          <button type="button" id="hostTest" class="btn btn-ghost">▶ جرّب مع VN</button>
+          <button type="button" id="hostRemove" class="btn btn-ghost danger">رجّع الشخصية المرسومة</button>
+        </div>
+        <div class="host-pick" id="hostPick" hidden><img id="hostImg" alt=""><i class="host-dot" id="hostDot"></i></div>
+        <label id="hostWWrap" hidden>عرض البق<input type="range" id="hostW" min="0.02" max="0.2" step="0.002"></label>
+        <button type="button" id="hostSave" class="btn btn-red" hidden>حفظ مكان البق</button>
+      </div>
+      <form id="setForm" class="card">
+        <label>اسم الإيفنت (بيظهر على شاشة الترتيب)<input id="sTitle"></label>
+        <div class="row">
+          <label class="sm">عدد الـ Sets<input id="sSets" type="number" min="1" max="10"></label>
+          <label class="sm">وقت التحدي (دقيقة)<input id="sMin" type="number" min="1" max="60"></label>
+          <label class="sm">وقت الفرصة الأخيرة (دقيقة)<input id="sRetry" type="number" min="1" max="30"></label>
+          <label class="sm">نقط الفرصة الأخيرة<input id="sRetryPts" type="number" min="0"></label>
+        </div>
+        <p class="mut small">عدد الـ Sets = أقصى عدد فرق في نفس التحدي في نفس الوقت.</p>
+        <h3>النقط حسب الوقت (المحاولة الأولى)</h3>
+        <div id="bracketRows" class="brackets"></div>
+        <button type="button" id="btnAddBracket" class="btn btn-ghost btn-sm">+ شريحة</button>
+        <button type="submit" class="btn btn-red btn-xl">حفظ الإعدادات</button>
+      </form>
+    </section>
+  </main>
+</div>
+
+<div id="mediaModal" class="modal" hidden><div class="modal-box wide" id="mediaBox"></div></div>
+<div id="avModal" class="modal" hidden>
+  <div class="modal-box"><div class="stage" id="avPreview"></div><button id="avClose" class="btn btn-ghost">قفل</button></div>
+</div>
+
+<div id="toasts"></div>
+<script type="module" src="js/i18n.js"></script>
+<script type="module" src="js/admin.js"></script>
+</body>
+</html>
