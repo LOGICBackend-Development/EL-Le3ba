@@ -698,8 +698,8 @@ $("#hostFile").onchange = async (e) => {
     const old = settings.host?.chunks || 0;
     const n = await writeChunks("media/host", await blobToB64(blob));
     if (old > n) await deleteChunks("media/host", old, n);
-    const keep = settings.host?.chunks ? {} : DEFAULT_MOUTH;
-    await updateDoc(sRef, { host: { ...(settings.host || {}), ...keep, chunks: n, mime: "image/jpeg", ver: Date.now() } });
+    // new picture → start from the default mouth position (tap to adjust if needed)
+    await updateDoc(sRef, { host: { ...DEFAULT_MOUTH, chunks: n, mime: "image/jpeg", ver: Date.now() } });
     toast("الصورة اترفعت ✓ دوس على البق في الصورة وبعدين حفظ", "good");
   } catch (err) { console.error(err); toast("الرفع فشل", "bad"); }
 };

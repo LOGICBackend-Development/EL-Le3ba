@@ -1,6 +1,6 @@
 // Original host: grandpa sitting in his armchair inside a room. Lip-sync driven live by the voice note's volume.
 // setMode("card") = head & shoulders crop, setMode("full") = whole scene (full-screen theater).
-const VIEW = { card: "75 165 250 250", full: "0 0 400 700" };
+const VIEW = { card: "80 120 240 240", full: "0 0 400 700" };
 
 const SVG = `
 <svg viewBox="${VIEW.card}" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -21,6 +21,18 @@ const SVG = `
   <linearGradient id="gHair" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset=".6" stop-color="#d4d5dc"/><stop offset="1" stop-color="#9a9ba6"/></linearGradient>
   <radialGradient id="gShoe" cx="40%" cy="30%" r="70%"><stop offset="0" stop-color="#4a4a52"/><stop offset="1" stop-color="#0c0c10"/></radialGradient>
   <filter id="fSoft" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="6"/></filter>
+  <filter id="fSoft2" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="3"/></filter>
+  <linearGradient id="gLeather" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9a5530"/><stop offset=".5" stop-color="#6b3418"/><stop offset="1" stop-color="#3a1a0b"/></linearGradient>
+  <linearGradient id="gLeatherSide" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#4a2210"/><stop offset=".55" stop-color="#8a4a28"/><stop offset="1" stop-color="#55280f"/></linearGradient>
+  <radialGradient id="gRoll" cx="45%" cy="35%" r="70%"><stop offset="0" stop-color="#b36a3e"/><stop offset="1" stop-color="#6b3418"/></radialGradient>
+  <linearGradient id="gSweater" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#a57250"/><stop offset=".55" stop-color="#7a4c30"/><stop offset="1" stop-color="#4f2f1c"/></linearGradient>
+  <linearGradient id="gSleeve" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#6e4329"/><stop offset=".5" stop-color="#9a6844"/><stop offset="1" stop-color="#5e381f"/></linearGradient>
+  <linearGradient id="gTrousers" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8d8a74"/><stop offset="1" stop-color="#4c4a3c"/></linearGradient>
+  <radialGradient id="gFace" cx="45%" cy="38%" r="68%"><stop offset="0" stop-color="#ffe3cf"/><stop offset=".65" stop-color="#f7c3a2"/><stop offset="1" stop-color="#e09a78"/></radialGradient>
+  <radialGradient id="gIris" cx="40%" cy="35%" r="70%"><stop offset="0" stop-color="#b07a48"/><stop offset=".6" stop-color="#6a3f1e"/><stop offset="1" stop-color="#2e1a0b"/></radialGradient>
+  <radialGradient id="gNose" cx="40%" cy="35%" r="70%"><stop offset="0" stop-color="#ffbfa0"/><stop offset="1" stop-color="#dc8a68"/></radialGradient>
+  <linearGradient id="gBeard" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#c9cad3"/></linearGradient>
+  <radialGradient id="gShoe2" cx="40%" cy="30%" r="70%"><stop offset="0" stop-color="#8a5a36"/><stop offset="1" stop-color="#2a160a"/></radialGradient>
   <filter id="fGlow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
 </defs>
 
@@ -74,103 +86,130 @@ const SVG = `
 <path d="M28 300 L96 300 L84 252 L40 252 Z" fill="#ffe2a0"/><path d="M28 300 L96 300 L94 294 L30 294 Z" fill="#e8b44a"/>
 <rect width="400" height="700" fill="url(#gLamp)"/>
 
-<!-- ===== CHAIR ===== -->
-<ellipse cx="200" cy="634" rx="150" ry="18" fill="#000" opacity=".4" filter="url(#fSoft)"/>
-<rect x="92" y="520" width="16" height="104" rx="4" fill="url(#gWood)"/><rect x="292" y="520" width="16" height="104" rx="4" fill="url(#gWood)"/>
-<path d="M108 474 L108 250 C108 196 142 176 200 176 C258 176 292 196 292 250 L292 474 Z" fill="url(#gChair)"/>
-<path d="M130 210 C160 196 240 196 270 210" stroke="#8a8a96" stroke-width="3" fill="none" opacity=".5"/>
-<path d="M88 470 L88 292 C84 254 108 238 132 248 L140 470 Z" fill="url(#gChairSide)"/>
-<path d="M312 470 L312 292 C316 254 292 238 268 248 L260 470 Z" fill="url(#gChairSide)"/>
-<rect x="104" y="488" width="192" height="40" rx="10" fill="#2e2e36"/>
-<rect x="112" y="430" width="176" height="64" rx="20" fill="#4a4a55"/>
-<path d="M74 420 C74 394 132 390 142 410 L142 524 L82 524 C78 484 74 452 74 420 Z" fill="url(#gChairSide)"/>
-<path d="M326 420 C326 394 268 390 258 410 L258 524 L318 524 C322 484 326 452 326 420 Z" fill="url(#gChairSide)"/>
-<ellipse cx="106" cy="412" rx="34" ry="16" fill="#62626e"/><ellipse cx="294" cy="412" rx="34" ry="16" fill="#62626e"/>
-<path d="M80 418 L94 418 L104 606 L90 606 Z" fill="url(#gWood)"/><path d="M320 418 L306 418 L296 606 L310 606 Z" fill="url(#gWood)"/>
+<!-- ===== CHAIR (leather wingback) ===== -->
+<ellipse cx="200" cy="640" rx="160" ry="20" fill="#000" opacity=".45" filter="url(#fSoft)"/>
+<rect x="94" y="540" width="16" height="92" rx="5" fill="url(#gWood)"/><rect x="290" y="540" width="16" height="92" rx="5" fill="url(#gWood)"/>
+<path d="M98 505 L98 250 C98 176 140 146 200 146 C260 146 302 176 302 250 L302 505 Z" fill="url(#gLeather)"/>
+<path d="M118 190 C150 168 250 168 282 190" stroke="#c07a4a" stroke-width="3" fill="none" opacity=".45"/>
+<g fill="#2e1408" opacity=".7"><circle cx="150" cy="205" r="3"/><circle cx="200" cy="195" r="3"/><circle cx="250" cy="205" r="3"/><circle cx="125" cy="250" r="3"/><circle cx="175" cy="240" r="3"/><circle cx="225" cy="240" r="3"/><circle cx="275" cy="250" r="3"/><circle cx="150" cy="290" r="3"/><circle cx="250" cy="290" r="3"/></g>
+<g stroke="#2e1408" stroke-width="1.5" opacity=".35" fill="none"><path d="M150 205 L175 240 L200 195 L225 240 L250 205 M125 250 L150 290 L175 240 M225 240 L250 290 L275 250"/></g>
+<path d="M80 505 L80 286 C74 244 102 226 128 236 L138 505 Z" fill="url(#gLeatherSide)"/>
+<path d="M320 505 L320 286 C326 244 298 226 272 236 L262 505 Z" fill="url(#gLeatherSide)"/>
+<rect x="104" y="500" width="192" height="44" rx="12" fill="#3a1a0b"/>
+<rect x="110" y="452" width="180" height="62" rx="24" fill="url(#gRoll)"/>
 
 <!-- ===== GRANDPA ===== -->
 <!-- legs -->
-<path d="M150 442 C140 472 140 502 146 524 L194 524 C198 496 198 466 198 442 Z" fill="url(#gPants)"/>
-<path d="M250 442 C260 472 260 502 254 524 L206 524 C202 496 202 466 202 442 Z" fill="url(#gPants)"/>
-<path d="M148 516 L194 516 L188 600 L156 600 Z" fill="url(#gPants)"/>
-<path d="M252 516 L206 516 L212 600 L244 600 Z" fill="url(#gPants)"/>
-<path d="M172 520 L172 598 M228 520 L228 598" stroke="#9c8159" stroke-width="2" opacity=".6"/>
-<rect x="157" y="596" width="30" height="14" rx="3" fill="#cfcfd6"/><rect x="213" y="596" width="30" height="14" rx="3" fill="#cfcfd6"/>
-<ellipse cx="170" cy="616" rx="28" ry="12" fill="url(#gShoe)"/><ellipse cx="230" cy="616" rx="28" ry="12" fill="url(#gShoe)"/>
-<path d="M156 610 Q170 606 184 610" stroke="#8a8a96" stroke-width="2" fill="none"/><path d="M216 610 Q230 606 244 610" stroke="#8a8a96" stroke-width="2" fill="none"/>
-<path d="M144 622 Q170 630 198 622 M202 622 Q230 630 256 622" stroke="#b07a4a" stroke-width="3" fill="none"/>
+<path d="M138 470 C130 500 136 524 148 536 L198 536 C202 512 202 488 200 470 Z" fill="url(#gTrousers)"/>
+<path d="M262 470 C270 500 264 524 252 536 L202 536 C198 512 198 488 200 470 Z" fill="url(#gTrousers)"/>
+<ellipse cx="172" cy="532" rx="29" ry="17" fill="#8d8a74"/><ellipse cx="228" cy="532" rx="29" ry="17" fill="#8d8a74"/>
+<path d="M146 532 L198 532 L190 606 L156 606 Z" fill="url(#gTrousers)"/>
+<path d="M254 532 L202 532 L210 606 L244 606 Z" fill="url(#gTrousers)"/>
+<path d="M174 540 L172 604 M226 540 L228 604" stroke="#3c3a2e" stroke-width="2" opacity=".5"/>
+<rect x="156" y="602" width="34" height="10" rx="3" fill="#3a3a40"/><rect x="210" y="602" width="34" height="10" rx="3" fill="#3a3a40"/>
+<ellipse cx="170" cy="620" rx="31" ry="14" fill="url(#gShoe2)"/><ellipse cx="230" cy="620" rx="31" ry="14" fill="url(#gShoe2)"/>
+<path d="M152 614 Q170 608 188 614 M212 614 Q230 608 248 614" stroke="#c08a5a" stroke-width="2.5" fill="none" opacity=".8"/>
+<path d="M142 626 Q170 636 200 626 M200 626 Q230 636 258 626" stroke="#1a0c04" stroke-width="3" fill="none"/>
 
-<!-- torso -->
-<path d="M140 450 C132 392 138 334 160 314 C176 302 224 302 240 314 C262 334 268 392 260 450 Z" fill="url(#gKnit)"/>
-<g stroke="#9c8262" stroke-width="1.6" opacity=".55">
-  <path d="M152 340 L150 448 M160 330 L158 448 M168 322 L166 448"/><path d="M248 340 L250 448 M240 330 L242 448 M232 322 L234 448"/>
+<!-- torso (cable-knit sweater) -->
+<path d="M130 478 C118 420 126 360 162 336 C180 324 220 324 238 336 C274 360 282 420 270 478 Z" fill="url(#gSweater)"/>
+<g stroke="#4a2c18" stroke-width="2.2" fill="none" opacity=".55">
+  <path d="M160 360 C154 380 166 392 160 412 C154 432 166 444 160 466"/>
+  <path d="M240 360 C246 380 234 392 240 412 C246 432 234 444 240 466"/>
+  <path d="M148 372 L146 470 M252 372 L254 470"/>
 </g>
-<path d="M182 308 L200 364 L218 308 Z" fill="#a7c6a0"/>
-<path d="M182 308 L193 330 L200 312 Z" fill="#c6dcbf"/><path d="M218 308 L207 330 L200 312 Z" fill="#c6dcbf"/>
-<path d="M178 308 L200 374 L222 308" stroke="#a88e6c" stroke-width="7" fill="none" stroke-linejoin="round"/>
-<path d="M200 374 L200 450" stroke="#a88e6c" stroke-width="7"/>
-<g fill="#7a4a24"><circle cx="200" cy="388" r="4.5"/><circle cx="200" cy="410" r="4.5"/><circle cx="200" cy="432" r="4.5"/></g>
-<path d="M150 418 L174 418 M226 418 L250 418" stroke="#a88e6c" stroke-width="3" opacity=".7"/>
+<g stroke="#c39672" stroke-width="1.6" fill="none" opacity=".35">
+  <path d="M164 360 C158 380 170 392 164 412 C158 432 170 444 164 466"/>
+  <path d="M236 360 C242 380 230 392 236 412 C242 432 230 444 236 466"/>
+</g>
+<path d="M200 340 L200 476" stroke="#4a2c18" stroke-width="3"/>
+<g fill="#3a2010"><circle cx="200" cy="372" r="4"/><circle cx="200" cy="402" r="4"/><circle cx="200" cy="432" r="4"/></g>
+<ellipse cx="200" cy="478" rx="72" ry="10" fill="#000" opacity=".18" filter="url(#fSoft2)"/>
 
-<!-- arms + hands on knees -->
+<!-- arms + chubby hands on knees -->
 <g class="av-armL">
-  <path d="M156 318 C134 330 118 372 112 404 C112 418 130 446 160 462 L176 446 C154 432 140 414 140 402 C146 380 158 352 170 334 Z" fill="url(#gKnit)"/>
-  <path d="M150 440 L166 456" stroke="#8f7655" stroke-width="5"/>
-  <g class="av-handL"><ellipse cx="170" cy="462" rx="15" ry="12" fill="url(#gHand)"/>
-  <path d="M162 470 L162 476 M168 472 L168 478 M174 472 L174 477" stroke="#d08c6e" stroke-width="3" stroke-linecap="round"/></g>
+  <path d="M152 340 C124 348 106 382 106 420 C106 448 126 480 154 500 L172 484 C150 462 134 442 134 420 C136 392 146 370 162 356 Z" fill="url(#gSleeve)"/>
+  <path d="M150 492 C156 484 166 480 174 486" stroke="#4a2c18" stroke-width="7" fill="none" stroke-linecap="round"/>
+  <g class="av-handL">
+    <ellipse cx="166" cy="500" rx="19" ry="15" fill="url(#gFace)"/>
+    <g fill="#f2b896" stroke="#d58e6c" stroke-width="1"><rect x="158" y="505" width="8" height="15" rx="4"/><rect x="167" y="507" width="8" height="15" rx="4"/><rect x="176" y="505" width="8" height="14" rx="4"/></g>
+  </g>
 </g>
 <g class="av-armR">
-  <path d="M244 318 C266 330 282 372 288 404 C288 418 270 446 240 462 L224 446 C246 432 260 414 260 402 C254 380 242 352 230 334 Z" fill="url(#gKnit)"/>
-  <path d="M250 440 L234 456" stroke="#8f7655" stroke-width="5"/>
-  <g class="av-handR"><ellipse cx="230" cy="462" rx="15" ry="12" fill="url(#gHand)"/>
-  <path d="M238 470 L238 476 M232 472 L232 478 M226 472 L226 477" stroke="#d08c6e" stroke-width="3" stroke-linecap="round"/>
-  <path d="M222 452 L222 438 M228 450 L229 434 M234 452 L236 438" class="av-fingers" stroke="#f0bd9c" stroke-width="6" stroke-linecap="round" opacity="0"/></g>
-  <path d="M236 450 L250 444 L254 452 L240 458 Z" fill="#c9962f"/>
+  <path d="M248 340 C276 348 294 382 294 420 C294 448 274 480 246 500 L228 484 C250 462 266 442 266 420 C264 392 254 370 238 356 Z" fill="url(#gSleeve)"/>
+  <path d="M250 492 C244 484 234 480 226 486" stroke="#4a2c18" stroke-width="7" fill="none" stroke-linecap="round"/>
+  <g class="av-handR">
+    <ellipse cx="234" cy="500" rx="19" ry="15" fill="url(#gFace)"/>
+    <g fill="#f2b896" stroke="#d58e6c" stroke-width="1"><rect x="216" y="505" width="8" height="14" rx="4"/><rect x="225" y="507" width="8" height="15" rx="4"/><rect x="234" y="505" width="8" height="15" rx="4"/></g>
+    <path class="av-fingers" d="M222 490 L220 470 M230 488 L230 466 M238 490 L240 470" stroke="#f2b896" stroke-width="7" stroke-linecap="round" opacity="0"/>
+    <path d="M246 486 L258 480 L262 490 L250 495 Z" fill="#d4a24a"/>
+  </g>
 </g>
 
-<!-- neck -->
-<path d="M184 284 L184 314 Q200 322 216 314 L216 284 Z" fill="#dc9c7c"/>
-<ellipse cx="200" cy="306" rx="20" ry="6" fill="#a8664a" opacity=".35"/>
+<!-- collar -->
+<path d="M168 330 L200 352 L232 330 L224 322 L200 336 L176 322 Z" fill="#e8e2cf"/>
 
-<!-- head -->
+<!-- ===== BIG PIXAR-STYLE HEAD ===== -->
 <g class="av-head">
-  <ellipse cx="154" cy="252" rx="10" ry="15" fill="#eab394"/><ellipse cx="246" cy="252" rx="10" ry="15" fill="#eab394"/>
-  <path d="M156 252 Q152 246 157 241 M244 252 Q248 246 243 241" stroke="#c98c6c" stroke-width="2" fill="none"/>
-  <ellipse cx="200" cy="250" rx="46" ry="56" fill="url(#gSkin)"/>
-  <path d="M157 238 C150 204 170 186 198 184 C228 182 247 198 246 228 C240 214 230 208 218 208 C214 198 202 194 192 198 C176 196 164 208 160 222 Z" fill="url(#gHair)"/>
-  <path d="M170 198 C180 172 224 166 238 186 C228 182 212 182 204 190 C198 184 182 186 170 198 Z" fill="#fff"/>
-  <path d="M182 192 C192 182 208 180 222 184" stroke="#a8a9b2" stroke-width="2" fill="none"/>
-  <path d="M156 240 C152 250 154 258 157 262 C159 254 160 248 162 243 Z" fill="#dcdde3"/>
-  <path d="M244 240 C248 250 246 258 243 262 C241 254 240 248 238 243 Z" fill="#dcdde3"/>
-  <path d="M182 212 Q200 207 218 212 M186 219 Q200 215 214 219" stroke="#d49a7a" stroke-width="1.5" fill="none" opacity=".7"/>
+  <ellipse cx="200" cy="330" rx="48" ry="9" fill="#000" opacity=".2" filter="url(#fSoft2)"/>
+  <ellipse cx="130" cy="250" rx="14" ry="21" fill="#f2b38f"/><ellipse cx="270" cy="250" rx="14" ry="21" fill="#f2b38f"/>
+  <path d="M133 252 Q127 244 134 236 M267 252 Q273 244 266 236" stroke="#d08a68" stroke-width="2.5" fill="none"/>
+  <path d="M200 160 C248 160 274 196 274 242 C274 292 246 326 200 328 C154 326 126 292 126 242 C126 196 152 160 200 160 Z" fill="url(#gFace)"/>
+  <ellipse cx="186" cy="190" rx="36" ry="16" fill="#fff" opacity=".22"/>
+  <ellipse cx="200" cy="312" rx="60" ry="20" fill="#c97a5a" opacity=".22" filter="url(#fSoft2)"/>
+
+  <!-- fluffy silver hair -->
+  <path d="M132 226 C116 168 158 134 204 138 C252 140 286 176 270 228 C264 204 254 190 242 184 C238 168 222 160 206 162 C186 158 168 168 160 184 C148 190 140 206 132 226 Z" fill="url(#gBeard)"/>
+  <path d="M164 152 C176 120 230 116 250 140 C236 132 216 132 206 142 C196 134 180 136 164 152 Z" fill="#fff"/>
+  <path d="M176 160 C190 146 214 144 232 152" stroke="#a9aab5" stroke-width="2.5" fill="none"/>
+  <g fill="url(#gBeard)"><circle cx="134" cy="214" r="15"/><circle cx="126" cy="232" r="12"/><circle cx="266" cy="214" r="15"/><circle cx="274" cy="232" r="12"/></g>
+  <path d="M176 176 Q200 170 224 176 M182 184 Q200 179 218 184" stroke="#d99a7a" stroke-width="1.6" fill="none" opacity=".6"/>
+
+  <!-- bushy brows -->
   <g class="av-brows">
-    <path d="M166 230 C173 222 188 221 195 228 C186 227 176 229 166 234 Z" fill="#f0f0f4" stroke="#b5b6be" stroke-width="1.2"/>
-    <path d="M234 230 C227 222 212 221 205 228 C214 227 224 229 234 234 Z" fill="#f0f0f4" stroke="#b5b6be" stroke-width="1.2"/>
+    <path d="M148 206 C156 188 186 184 198 198 C186 196 166 198 150 212 Z" fill="#f4f4f8" stroke="#b9bac4" stroke-width="1.3"/>
+    <path d="M252 206 C244 188 214 184 202 198 C214 196 234 198 250 212 Z" fill="#f4f4f8" stroke="#b9bac4" stroke-width="1.3"/>
   </g>
+
+  <!-- big expressive eyes -->
   <g class="av-eyes">
-    <ellipse cx="181" cy="246" rx="7.5" ry="6" fill="#fff"/><ellipse cx="219" cy="246" rx="7.5" ry="6" fill="#fff"/>
+    <ellipse cx="174" cy="232" rx="17" ry="19" fill="#fff"/><ellipse cx="226" cy="232" rx="17" ry="19" fill="#fff"/>
     <g class="av-pupils">
-      <circle cx="182" cy="247" r="4" fill="#4a2e1c"/><circle cx="218" cy="247" r="4" fill="#4a2e1c"/>
-      <circle cx="183.5" cy="245.5" r="1.3" fill="#fff"/><circle cx="219.5" cy="245.5" r="1.3" fill="#fff"/>
+      <circle cx="176" cy="235" r="10.5" fill="url(#gIris)"/><circle cx="224" cy="235" r="10.5" fill="url(#gIris)"/>
+      <circle cx="176" cy="235" r="5.4" fill="#120806"/><circle cx="224" cy="235" r="5.4" fill="#120806"/>
+      <circle cx="180" cy="230" r="3.2" fill="#fff"/><circle cx="228" cy="230" r="3.2" fill="#fff"/>
+      <circle cx="172" cy="240" r="1.4" fill="#fff" opacity=".8"/><circle cx="220" cy="240" r="1.4" fill="#fff" opacity=".8"/>
     </g>
+    <path d="M156 228 C160 210 188 210 192 228 C186 220 162 220 156 228 Z" fill="#f2b896"/>
+    <path d="M208 228 C212 210 240 210 244 228 C238 220 214 220 208 228 Z" fill="#f2b896"/>
+    <path d="M157 227 C164 219 184 219 191 227 M209 227 C216 219 236 219 243 227" stroke="#8a4a32" stroke-width="2" fill="none"/>
   </g>
-  <g fill="rgba(255,255,255,.1)" stroke="#121212" stroke-width="4.5" stroke-linejoin="round">
-    <rect x="164" y="234" width="33" height="25" rx="7"/><rect x="203" y="234" width="33" height="25" rx="7"/>
-  </g>
-  <path d="M197 243 Q200 239 203 243" stroke="#121212" stroke-width="3.5" fill="none"/>
-  <path d="M164 240 L152 238 M236 240 L248 238" stroke="#121212" stroke-width="3.5"/>
-  <path d="M169 239 L175 237.5 M208 239 L214 237.5" stroke="#fff" stroke-width="2" opacity=".55"/>
-  <path d="M200 250 C195 262 189 268 194 273 C198 276 202 276 206 273 C211 268 205 262 200 250 Z" fill="#e5a283"/>
-  <circle cx="172" cy="272" r="8" fill="#f19a86" opacity=".35"/><circle cx="228" cy="272" r="8" fill="#f19a86" opacity=".35"/>
-  <path d="M176 270 Q173 279 179 287 M224 270 Q227 279 221 287" stroke="#d49a7a" stroke-width="1.6" fill="none"/>
-  <ellipse class="av-mouth" cx="200" cy="284" rx="13" ry="1.5" fill="#5a1616"/>
-  <rect class="av-teeth" x="191" y="282.5" width="18" height="0" rx="1.5" fill="#fffaf0"/>
-  <path d="M185 282 Q200 288 215 282" stroke="#b5665a" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+
+  <!-- round glasses -->
+  <g fill="rgba(255,255,255,.07)" stroke="#3b2416" stroke-width="5"><circle cx="174" cy="232" r="26"/><circle cx="226" cy="232" r="26"/></g>
+  <path d="M199 230 Q200 223 201 230" stroke="#3b2416" stroke-width="4" fill="none"/>
+  <path d="M148 228 L132 236 M252 228 L268 236" stroke="#3b2416" stroke-width="4"/>
+  <path d="M158 218 Q166 211 176 211 M210 218 Q218 211 228 211" stroke="#fff" stroke-width="3" fill="none" opacity=".55" stroke-linecap="round"/>
+
+  <!-- nose & cheeks -->
+  <ellipse cx="158" cy="274" rx="16" ry="10" fill="#ff8f80" opacity=".35"/><ellipse cx="242" cy="274" rx="16" ry="10" fill="#ff8f80" opacity=".35"/>
+  <ellipse cx="200" cy="266" rx="17" ry="15" fill="url(#gNose)"/>
+  <ellipse cx="194" cy="259" rx="5.5" ry="3.8" fill="#fff" opacity=".55"/>
+  <path d="M191 276 Q194 279 196 276 M204 276 Q206 279 209 276" stroke="#b0634a" stroke-width="1.6" fill="none"/>
+
+  <!-- beard (sides, static) -->
+  <path d="M134 258 C134 300 160 330 200 336 C240 330 266 300 266 258 C260 284 246 296 232 300 C220 296 180 296 168 300 C154 296 140 284 134 258 Z" fill="url(#gBeard)"/>
+  <!-- mouth -->
+  <ellipse class="av-mouth" cx="200" cy="298" rx="16" ry="2" fill="#5a1414"/>
+  <rect class="av-teeth" x="189" y="295" width="22" height="0" rx="2" fill="#fffaf0"/>
+  <!-- chin + lower beard (moves) -->
   <g class="av-jaw">
-    <path d="M178 284 Q200 297 222 284 C222 299 213 309 200 311 C187 309 178 299 178 284 Z" fill="#f0bd9c"/>
-    <path d="M191 290 Q200 295 209 290" stroke="#c97a6a" stroke-width="2" fill="none" stroke-linecap="round"/>
-    <path d="M194 304 Q200 306 206 304" stroke="#d49a7a" stroke-width="1.4" fill="none"/>
+    <path d="M162 300 C168 294 232 294 238 300 C242 326 228 352 200 356 C172 352 158 326 162 300 Z" fill="url(#gBeard)"/>
+    <path d="M186 301 Q200 309 214 301" stroke="#d27a72" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <g stroke="#b9bac4" stroke-width="1.4" fill="none" opacity=".7"><path d="M180 318 Q182 332 186 342 M200 318 L200 350 M220 318 Q218 332 214 342"/></g>
   </g>
+  <!-- mustache -->
+  <path d="M166 290 C174 274 194 276 200 285 C206 276 226 274 234 290 C226 302 210 298 200 293 C190 298 174 302 166 290 Z" fill="#fbfbfd" stroke="#c4c5ce" stroke-width="1.2"/>
 </g>
 
 <rect width="400" height="700" fill="url(#gVig)" pointer-events="none"/>
@@ -247,14 +286,14 @@ export function createAvatar() {
       r.teeth.setAttribute("cy", (photo.my + th * 0.4).toFixed(2));
       return;
     }
-    r.jaw.setAttribute("transform", `translate(0 ${(a * 10).toFixed(2)})`);
-    r.mouth.setAttribute("ry", (1.5 + a * 9).toFixed(2));
-    r.mouth.setAttribute("cy", (284 + a * 4.5).toFixed(2));
-    r.teeth.setAttribute("height", (a > 0.12 ? Math.min(4, a * 5) : 0).toFixed(2));
+    r.jaw.setAttribute("transform", `translate(0 ${(a * 13).toFixed(2)})`);
+    r.mouth.setAttribute("ry", (2 + a * 11).toFixed(2));
+    r.mouth.setAttribute("cy", (298 + a * 6).toFixed(2));
+    r.teeth.setAttribute("height", (a > 0.12 ? Math.min(5, a * 6) : 0).toFixed(2));
     r.brows.setAttribute("transform", `translate(0 ${(-a * 2.5).toFixed(2)})`);
     const nod = t ? Math.sin(t / 380) * 1.6 * (0.4 + a) : 0;
     const tilt = t ? Math.sin(t / 900) * 1.4 : 0;
-    r.head.setAttribute("transform", `rotate(${tilt.toFixed(2)} 200 300) translate(0 ${nod.toFixed(2)})`);
+    r.head.setAttribute("transform", `rotate(${tilt.toFixed(2)} 200 336) translate(0 ${nod.toFixed(2)})`);
   }
 
   /* ---- life: eyes look around, hands gesture on strong moments ---- */
@@ -264,8 +303,8 @@ export function createAvatar() {
     if (now > e.next) {           // new look target (saccade)
       const talking = a > 0.05;
       const centre = talking && Math.random() < 0.6;
-      e.tx = centre ? 0 : (Math.random() * 2 - 1) * 2.4;
-      e.ty = centre ? 0 : (Math.random() * 2 - 1) * 1.3;
+      e.tx = centre ? 0 : (Math.random() * 2 - 1) * 3.6;
+      e.ty = centre ? 0 : (Math.random() * 2 - 1) * 2.2;
       e.next = now + (talking ? 700 : 1200) + Math.random() * 2200;
     }
     e.x += (e.tx - e.x) * 0.35; e.y += (e.ty - e.y) * 0.35;
@@ -301,9 +340,9 @@ export function createAvatar() {
       return;
     }
     r.pupils.setAttribute("transform", `translate(${life.eye.x.toFixed(2)} ${life.eye.y.toFixed(2)})`);
-    r.armR.setAttribute("transform", `rotate(${L.gR.toFixed(2)} 244 322)`);
-    r.armL.setAttribute("transform", `rotate(${L.gL.toFixed(2)} 156 322)`);
-    r.handR.setAttribute("transform", `rotate(${L.wave.toFixed(2)} 230 462)`);
+    r.armR.setAttribute("transform", `rotate(${L.gR.toFixed(2)} 262 346)`);
+    r.armL.setAttribute("transform", `rotate(${L.gL.toFixed(2)} 138 346)`);
+    r.handR.setAttribute("transform", `rotate(${L.wave.toFixed(2)} 234 500)`);
     r.fingers.setAttribute("opacity", L.fing.toFixed(2));
   }
   // keep eyes alive even when silent

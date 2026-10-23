@@ -246,7 +246,7 @@ export function rankingHtml(arr, meId = null, opts = {}) {
 }
 
 /* ---------- host photo (uploaded in admin → settings.host) ---------- */
-export const DEFAULT_MOUTH = { mx: 0.492, my: 0.432, mw: 0.07 }; // fractions of image size
+export const DEFAULT_MOUTH = { mx: 0.493, my: 0.288, mw: 0.06 }; // fractions of image size
 let hostCache = { ver: null, p: null };
 export async function loadHostPhoto(host) {
   if (!host || !host.chunks) return null;
