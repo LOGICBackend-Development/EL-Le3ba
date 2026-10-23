@@ -654,7 +654,7 @@ async function syncHost() {
   const h = settings?.host;
   const ver = h?.chunks ? `${h.ver}` : null;
   $("#hostRemove").hidden = !ver;
-  ["#hostPick", "#hostWWrap", "#hostSave"].forEach((q) => { $(q).hidden = !ver; });
+  ["#hostPick", "#hostWWrap", "#hostSave", "#hostNudge"].forEach((q) => { $(q).hidden = !ver; });
   if (ver === hostVer && hostLocal) return;
   hostVer = ver;
   if (!ver) { hostLocal = null; avatar.setPhoto(null); return; }
@@ -676,18 +676,56 @@ function placeDot() {
 const hostPhotoFromLocal = () => hostLocal && ({
   url: hostLocal.url, W: hostLocal.W, H: hostLocal.H, mx: hostLocal.mx * hostLocal.W, my: hostLocal.my * hostLocal.H, mw: hostLocal.mw * hostLocal.W,
 });
-$("#hostPick").addEventListener("click", (e) => {
-  if (!hostLocal) return;
+// Drag (mouse or finger) or tap to place the mouth; arrows nudge; saves automatically.
+let saveT = null;
+function autoSaveMouth() {
+  clearTimeout(saveT);
+  saveT = setTimeout(async () => {
+    if (!hostLocal) return;
+    try {
+      await updateDoc(sRef, { "host.mx": hostLocal.mx, "host.my": hostLocal.my, "host.mw": hostLocal.mw });
+      avatar.setPhoto(hostPhotoFromLocal());
+      $("#hostSaved").textContent = tr("مكان البق اتحفظ ✓");
+    } catch (e) { console.error(e); toast("الرفع فشل", "bad"); }
+  }, 400);
+}
+function setMouthFromPoint(x, y) {
   const r = $("#hostImg").getBoundingClientRect();
-  hostLocal.mx = (e.clientX - r.left) / r.width; hostLocal.my = (e.clientY - r.top) / r.height;
-  placeDot();
+  if (!r.width) return;
+  hostLocal.mx = Math.min(1, Math.max(0, (x - r.left) / r.width));
+  hostLocal.my = Math.min(1, Math.max(0, (y - r.top) / r.height));
+  placeDot(); $("#hostSaved").textContent = "";
+}
+let dragging = false;
+const pick = $("#hostPick");
+pick.addEventListener("pointerdown", (e) => {
+  if (!hostLocal) return;
+  e.preventDefault(); dragging = true;
+  try { pick.setPointerCapture(e.pointerId); } catch { /* ignore */ }
+  setMouthFromPoint(e.clientX, e.clientY);
 });
-$("#hostW").addEventListener("input", (e) => { if (hostLocal) { hostLocal.mw = Number(e.target.value); placeDot(); } });
+pick.addEventListener("pointermove", (e) => { if (dragging) { e.preventDefault(); setMouthFromPoint(e.clientX, e.clientY); } });
+const endDrag = () => { if (dragging) { dragging = false; autoSaveMouth(); } };
+pick.addEventListener("pointerup", endDrag);
+pick.addEventListener("pointercancel", endDrag);
+$("#hostNudge").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-d]"); if (!b || !hostLocal) return;
+  const step = 0.004, [dx, dy] = b.dataset.d.split(",").map(Number);
+  if (b.dataset.d === "w+") hostLocal.mw = Math.min(0.2, hostLocal.mw + 0.004);
+  else if (b.dataset.d === "w-") hostLocal.mw = Math.max(0.02, hostLocal.mw - 0.004);
+  else { hostLocal.mx = Math.min(1, Math.max(0, hostLocal.mx + dx * step)); hostLocal.my = Math.min(1, Math.max(0, hostLocal.my + dy * step)); }
+  $("#hostW").value = hostLocal.mw; placeDot(); autoSaveMouth();
+});
+$("#hostW").addEventListener("input", (e) => { if (hostLocal) { hostLocal.mw = Number(e.target.value); placeDot(); autoSaveMouth(); } });
 $("#hostSave").onclick = async () => {
   if (!hostLocal) return;
   await updateDoc(sRef, { "host.mx": hostLocal.mx, "host.my": hostLocal.my, "host.mw": hostLocal.mw });
   avatar.setPhoto(hostPhotoFromLocal());
   toast("مكان البق اتحفظ ✓", "good");
+};
+$("#hostReset").onclick = () => {
+  if (!hostLocal) return;
+  Object.assign(hostLocal, DEFAULT_MOUTH); $("#hostW").value = hostLocal.mw; placeDot(); autoSaveMouth();
 };
 $("#hostFile").onchange = async (e) => {
   const f = e.target.files[0]; e.target.value = "";

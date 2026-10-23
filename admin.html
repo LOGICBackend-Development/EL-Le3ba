@@ -139,6 +139,16 @@
           <button type="button" id="hostRemove" class="btn btn-ghost danger">رجّع الشخصية المرسومة</button>
         </div>
         <div class="host-pick" id="hostPick" hidden><img id="hostImg" alt=""><i class="host-dot" id="hostDot"></i></div>
+        <p class="mut small">اسحب الدايرة على بقّه بالماوس أو بصباعك — أو استخدم الأسهم. بيتحفظ لوحده. <b id="hostSaved" class="ok-text"></b></p>
+        <div class="nudge" id="hostNudge" hidden>
+          <button type="button" class="btn btn-sm btn-ghost" data-d="0,-1">↑</button>
+          <button type="button" class="btn btn-sm btn-ghost" data-d="0,1">↓</button>
+          <button type="button" class="btn btn-sm btn-ghost" data-d="-1,0">←</button>
+          <button type="button" class="btn btn-sm btn-ghost" data-d="1,0">→</button>
+          <button type="button" class="btn btn-sm btn-ghost" data-d="w-">− أصغر</button>
+          <button type="button" class="btn btn-sm btn-ghost" data-d="w+">+ أكبر</button>
+          <button type="button" class="btn btn-sm btn-ghost" id="hostReset">↺ المكان الافتراضي</button>
+        </div>
         <label id="hostWWrap" hidden>عرض البق<input type="range" id="hostW" min="0.02" max="0.2" step="0.002"></label>
         <button type="button" id="hostSave" class="btn btn-red" hidden>حفظ مكان البق</button>
       </div>

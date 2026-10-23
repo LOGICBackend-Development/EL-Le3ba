@@ -359,3 +359,8 @@ html:not(.i18n-ready) body{visibility:hidden}
 .tk.now{background:linear-gradient(120deg,rgba(143,79,224,.5),rgba(240,96,154,.5));color:#fff;font-weight:800}
 .tk.next{outline:2px dashed rgba(247,196,138,.7);outline-offset:-3px}
 .legend .tk.next{outline-offset:0}
+
+.host-pick{touch-action:none;user-select:none;-webkit-user-select:none}
+.host-pick img{pointer-events:none;-webkit-user-drag:none}
+.nudge{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 10px}
+.ok-text{color:var(--green)}
