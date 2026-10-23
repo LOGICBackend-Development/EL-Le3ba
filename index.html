@@ -48,6 +48,8 @@
       <div class="stage" id="avLobby"></div>
       <h2 class="center">جاهزين يا <span id="lobbyTeam" class="grad-text"></span>؟</h2>
       <p class="center mut">إنتوا جوه اللعبة. استنوا إشارة البداية…</p>
+      <p class="welcome-text" id="welcomeText" hidden></p>
+      <button class="btn btn-red btn-xl" id="btnWelcome" hidden>▶ اسمعوا رسالة الترحيب</button>
       <div class="pulse-dots"><i></i><i></i><i></i></div>
     </div>
     <div class="card howto">
@@ -161,6 +163,10 @@
   <video id="thVideo" playsinline preload="auto" hidden></video>
   <div class="th-top"><span class="chip" id="thName"></span><button id="thClose" class="icon-btn" title="قفل">✕</button></div>
   <div class="th-bottom"><div class="eq"><i></i><i></i><i></i><i></i><i></i></div></div>
+</div>
+
+<div id="callFx" class="overlay call-fx" hidden>
+  <div class="overlay-box"><div class="big-emoji">📣</div><h2>المضيف عنده رسالة ليكم</h2><button class="btn btn-red btn-xl" id="btnCallListen">▶ دوسوا عشان تسمعوا</button></div>
 </div>
 
 <div id="countdown" class="countdown" hidden><span id="cdNum">3</span></div>

@@ -113,13 +113,20 @@ const SVG = `
 <path d="M150 418 L174 418 M226 418 L250 418" stroke="#a88e6c" stroke-width="3" opacity=".7"/>
 
 <!-- arms + hands on knees -->
-<path d="M156 318 C134 330 118 372 112 404 C112 418 130 446 160 462 L176 446 C154 432 140 414 140 402 C146 380 158 352 170 334 Z" fill="url(#gKnit)"/>
-<path d="M244 318 C266 330 282 372 288 404 C288 418 270 446 240 462 L224 446 C246 432 260 414 260 402 C254 380 242 352 230 334 Z" fill="url(#gKnit)"/>
-<path d="M150 440 L166 456 M250 440 L234 456" stroke="#8f7655" stroke-width="5"/>
-<ellipse cx="170" cy="462" rx="15" ry="12" fill="url(#gHand)"/><ellipse cx="230" cy="462" rx="15" ry="12" fill="url(#gHand)"/>
-<path d="M162 470 L162 476 M168 472 L168 478 M174 472 L174 477" stroke="#d08c6e" stroke-width="3" stroke-linecap="round"/>
-<path d="M238 470 L238 476 M232 472 L232 478 M226 472 L226 477" stroke="#d08c6e" stroke-width="3" stroke-linecap="round"/>
-<path d="M236 450 L250 444 L254 452 L240 458 Z" fill="#c9962f"/>
+<g class="av-armL">
+  <path d="M156 318 C134 330 118 372 112 404 C112 418 130 446 160 462 L176 446 C154 432 140 414 140 402 C146 380 158 352 170 334 Z" fill="url(#gKnit)"/>
+  <path d="M150 440 L166 456" stroke="#8f7655" stroke-width="5"/>
+  <g class="av-handL"><ellipse cx="170" cy="462" rx="15" ry="12" fill="url(#gHand)"/>
+  <path d="M162 470 L162 476 M168 472 L168 478 M174 472 L174 477" stroke="#d08c6e" stroke-width="3" stroke-linecap="round"/></g>
+</g>
+<g class="av-armR">
+  <path d="M244 318 C266 330 282 372 288 404 C288 418 270 446 240 462 L224 446 C246 432 260 414 260 402 C254 380 242 352 230 334 Z" fill="url(#gKnit)"/>
+  <path d="M250 440 L234 456" stroke="#8f7655" stroke-width="5"/>
+  <g class="av-handR"><ellipse cx="230" cy="462" rx="15" ry="12" fill="url(#gHand)"/>
+  <path d="M238 470 L238 476 M232 472 L232 478 M226 472 L226 477" stroke="#d08c6e" stroke-width="3" stroke-linecap="round"/>
+  <path d="M222 452 L222 438 M228 450 L229 434 M234 452 L236 438" class="av-fingers" stroke="#f0bd9c" stroke-width="6" stroke-linecap="round" opacity="0"/></g>
+  <path d="M236 450 L250 444 L254 452 L240 458 Z" fill="#c9962f"/>
+</g>
 
 <!-- neck -->
 <path d="M184 284 L184 314 Q200 322 216 314 L216 284 Z" fill="#dc9c7c"/>
@@ -142,8 +149,10 @@ const SVG = `
   </g>
   <g class="av-eyes">
     <ellipse cx="181" cy="246" rx="7.5" ry="6" fill="#fff"/><ellipse cx="219" cy="246" rx="7.5" ry="6" fill="#fff"/>
-    <circle cx="182" cy="247" r="4" fill="#4a2e1c"/><circle cx="218" cy="247" r="4" fill="#4a2e1c"/>
-    <circle cx="183.5" cy="245.5" r="1.3" fill="#fff"/><circle cx="219.5" cy="245.5" r="1.3" fill="#fff"/>
+    <g class="av-pupils">
+      <circle cx="182" cy="247" r="4" fill="#4a2e1c"/><circle cx="218" cy="247" r="4" fill="#4a2e1c"/>
+      <circle cx="183.5" cy="245.5" r="1.3" fill="#fff"/><circle cx="219.5" cy="245.5" r="1.3" fill="#fff"/>
+    </g>
   </g>
   <g fill="rgba(255,255,255,.1)" stroke="#121212" stroke-width="4.5" stroke-linejoin="round">
     <rect x="164" y="234" width="33" height="25" rx="7"/><rect x="203" y="234" width="33" height="25" rx="7"/>
@@ -217,6 +226,8 @@ export function createAvatar() {
       : {
         jaw: el.querySelector(".av-jaw"), mouth: el.querySelector(".av-mouth"), teeth: el.querySelector(".av-teeth"),
         brows: el.querySelector(".av-brows"), head: el.querySelector(".av-head"),
+        pupils: el.querySelector(".av-pupils"), armL: el.querySelector(".av-armL"), armR: el.querySelector(".av-armR"),
+        handR: el.querySelector(".av-handR"), fingers: el.querySelector(".av-fingers"),
       };
     applyMode(); setAmp(0);
   }
@@ -234,8 +245,6 @@ export function createAvatar() {
       const th = a > 0.15 ? Math.min(mw * 0.045, drop * 0.16) : 0;
       r.teeth.setAttribute("ry", th.toFixed(2));
       r.teeth.setAttribute("cy", (photo.my + th * 0.4).toFixed(2));
-      const k = 1 + (t ? Math.sin(t / 2600) * 0.006 : 0);
-      r.all.setAttribute("transform", t ? `translate(${photo.mx} ${photo.my}) scale(${k.toFixed(4)}) translate(${-photo.mx} ${-photo.my})` : "");
       return;
     }
     r.jaw.setAttribute("transform", `translate(0 ${(a * 10).toFixed(2)})`);
@@ -247,6 +256,60 @@ export function createAvatar() {
     const tilt = t ? Math.sin(t / 900) * 1.4 : 0;
     r.head.setAttribute("transform", `rotate(${tilt.toFixed(2)} 200 300) translate(0 ${nod.toFixed(2)})`);
   }
+
+  /* ---- life: eyes look around, hands gesture on strong moments ---- */
+  const life = { eye: { x: 0, y: 0, tx: 0, ty: 0, next: 0 }, gesture: null, lastGesture: 0, punch: 0 };
+  function lifeStep(now, a) {
+    const e = life.eye;
+    if (now > e.next) {           // new look target (saccade)
+      const talking = a > 0.05;
+      const centre = talking && Math.random() < 0.6;
+      e.tx = centre ? 0 : (Math.random() * 2 - 1) * 2.4;
+      e.ty = centre ? 0 : (Math.random() * 2 - 1) * 1.3;
+      e.next = now + (talking ? 700 : 1200) + Math.random() * 2200;
+    }
+    e.x += (e.tx - e.x) * 0.35; e.y += (e.ty - e.y) * 0.35;
+    // gesture on a strong moment
+    if (a > 0.62 && now - life.lastGesture > 2200 && !life.gesture) {
+      const kinds = ["present", "point", "both", "wave"];
+      life.gesture = { kind: kinds[(Math.random() * kinds.length) | 0], t0: now, dur: 1300 + Math.random() * 600 };
+      life.lastGesture = now; life.punch = 1;
+    }
+    let gR = 0, gL = 0, wave = 0, fing = 0;
+    if (life.gesture) {
+      const g = life.gesture, p = (now - g.t0) / g.dur;
+      if (p >= 1) life.gesture = null;
+      else {
+        const k = Math.max(0, Math.min(1, p < 0.25 ? p / 0.25 : p > 0.7 ? (1 - p) / 0.3 : 1));   // ease in, hold, ease out
+        const ease = k * k * (3 - 2 * k);
+        if (g.kind === "present") { gR = -9 * ease; wave = -18 * ease; fing = ease; }
+        else if (g.kind === "point") { gR = 6 * ease; wave = 22 * ease; fing = ease; }
+        else if (g.kind === "both") { gR = -7 * ease; gL = 7 * ease; wave = -12 * ease; fing = ease; }
+        else { gR = -11 * ease; wave = Math.sin((now - g.t0) / 90) * 18 * ease - 10 * ease; fing = ease; }
+      }
+    }
+    const idle = Math.sin(now / 1400) * 1.2;
+    life.punch *= 0.9;
+    return { gR: gR + idle, gL: gL - idle * 0.6, wave, fing };
+  }
+  function applyLife(now, a) {
+    const L = lifeStep(now, a);
+    if (photo) {                   // still picture: camera push-in + lean on strong moments
+      const k = 1 + (now ? Math.sin(now / 2600) * 0.006 : 0) + life.punch * 0.035;
+      const lean = life.punch * 0.8 + Math.sin(now / 3100) * 0.25;
+      r.all.setAttribute("transform", `translate(${photo.mx} ${photo.my}) rotate(${lean.toFixed(2)}) scale(${k.toFixed(4)}) translate(${-photo.mx} ${-photo.my})`);
+      return;
+    }
+    r.pupils.setAttribute("transform", `translate(${life.eye.x.toFixed(2)} ${life.eye.y.toFixed(2)})`);
+    r.armR.setAttribute("transform", `rotate(${L.gR.toFixed(2)} 244 322)`);
+    r.armL.setAttribute("transform", `rotate(${L.gL.toFixed(2)} 156 322)`);
+    r.handR.setAttribute("transform", `rotate(${L.wave.toFixed(2)} 230 462)`);
+    r.fingers.setAttribute("opacity", L.fing.toFixed(2));
+  }
+  // keep eyes alive even when silent
+  let idleRaf = 0;
+  const idleLoop = (now) => { if (!audio) applyLife(now, 0); idleRaf = requestAnimationFrame(idleLoop); };
+  idleRaf = requestAnimationFrame(idleLoop);
 
   function setMode(m) { mode = m; applyMode(); }
   // p = { url, W, H, mx, my, mw } in image pixels, or null for the drawn host
@@ -287,6 +350,7 @@ export function createAvatar() {
       } else target = Math.random() * 0.6;
       amp = target > amp ? amp * 0.4 + target * 0.6 : amp * 0.75 + target * 0.25;
       setAmp(amp, (now || performance.now()) - t0 + 1);
+      applyLife(now || performance.now(), amp);
       raf = requestAnimationFrame(loop);
     };
     const a = audio;
@@ -295,5 +359,5 @@ export function createAvatar() {
   }
 
   build();
-  return { el, speak, stop, setMode, setPhoto, _setAmp: setAmp };
+  return { el, speak, stop, setMode, setPhoto, _setAmp: setAmp, _test: { life, applyLife } };
 }

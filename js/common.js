@@ -2,13 +2,13 @@ import { t as tr } from "./i18n.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-  getFirestore, doc, getDoc, setDoc, deleteDoc, runTransaction,
+  initializeFirestore, doc, getDoc, setDoc, deleteDoc, runTransaction,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig, ADMIN_EMAIL, TEAM_EMAIL_DOMAIN } from "./firebase-config.js";
 
 export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+export const db = initializeFirestore(app, { experimentalAutoDetectLongPolling: true });
 export { firebaseConfig, ADMIN_EMAIL, TEAM_EMAIL_DOMAIN };
 
 /* ---------- defaults ---------- */
@@ -118,10 +118,23 @@ export async function allocate(uid, settings, challenges) {
     const slots = cleanSlots(oS.exists() ? oS.data().slots : {}, uid);
     const cap = Math.max(1, Number(settings.sets) || 1);
     const free = remaining.filter((c) => (slots[c.id] || []).length < cap);
-    if (!free.length) return "wait";
-    const minLoad = Math.min(...free.map((c) => (slots[c.id] || []).length));
-    const pool = free.filter((c) => (slots[c.id] || []).length === minLoad);
-    const pick = pool[Math.floor(Math.random() * pool.length)];
+    let pick = null;
+    const route = (t.route || []).filter((id) => remaining.some((c) => c.id === id));
+    if (route.length) {
+      // follow the team's planned route; next planned challenge first
+      const planned = remaining.find((c) => c.id === route[0]);
+      if (planned && (slots[planned.id] || []).length < cap) pick = planned;
+      else if (settings.routeStrict === false && free.length) {
+        const pos = (id) => { const i = route.indexOf(id); return i < 0 ? 999 : i; };
+        pick = free.slice().sort((a, b) => pos(a.id) - pos(b.id))[0];  // flexible: next free one in route order
+      } else return "wait";
+    } else {
+      if (!free.length) return "wait";
+      const minLoad = Math.min(...free.map((c) => (slots[c.id] || []).length));
+      const pool = free.filter((c) => (slots[c.id] || []).length === minLoad);
+      pick = pool[Math.floor(Math.random() * pool.length)];
+    }
+    if (!pick) return "wait";
     slots[pick.id] = [...(slots[pick.id] || []), uid];
     tx.set(oRef, { slots });
     tx.update(tRef, {
@@ -149,6 +162,7 @@ export async function finishChallenge(uid, { passed, points = 0, totalMs = 0, ex
       current: null, done,
       [`results.${cur.cid}`]: {
         status: passed ? "passed" : "failed", points: passed ? points : 0, timeMs: totalMs, attempt: cur.attempt || 1,
+        round: done.length,
       },
     };
     if (passed) {
@@ -286,4 +300,13 @@ export async function getMediaBlobUrl(path, n, mime, ver) {
   })().finally(() => inflight.delete(key));
   inflight.set(key, job);
   return job;
+}
+
+/* ---------- planned routes (Latin-square rotation) ---------- */
+const shuffle = (a) => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+// Every round each challenge gets at most `sets` teams (when teams ≤ challenges × sets).
+export function makeRoutes(teamIds, challengeIds, sets) {
+  const C = shuffle(challengeIds), T = shuffle(teamIds), n = C.length, out = {};
+  T.forEach((id, k) => { out[id] = Array.from({ length: n }, (_, r) => C[(k + r) % n]); });
+  return { routes: out, strict: T.length <= n * Math.max(1, sets) };
 }

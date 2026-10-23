@@ -31,6 +31,7 @@
       <button data-tab="subs">الأدلة <span class="count" id="subBadge" hidden>0</span></button>
       <button data-tab="challenges">التحديات</button>
       <button data-tab="teams">الفرق</button>
+      <button data-tab="track">التتبع</button>
       <button data-tab="settings">الإعدادات</button>
     </nav>
     <div class="adm-tools">
@@ -77,6 +78,21 @@
       <button id="btnAddCh" class="btn btn-ghost">+ تحدي جديد</button>
     </section>
 
+    <!-- TRACKING -->
+    <section class="tab" id="tab-track" hidden>
+      <div class="card ctrl-bar">
+        <div>
+          <h3>مسار كل فريق</h3>
+          <p class="mut small" id="trackInfo"></p>
+        </div>
+        <button id="btnRoutes" class="btn btn-red">🔀 اعمل المسارات</button>
+      </div>
+      <div class="legend"><span class="tk done">✓ عدّى</span><span class="tk fail">✗ معدّاش</span><span class="tk now">▶ بيلعب دلوقتي</span><span class="tk next">الجاي</span></div>
+      <div class="table-wrap"><table class="tbl track" id="trackTable"></table></div>
+      <h3 class="sec-title">كل راوند مين فين</h3>
+      <div class="table-wrap"><table class="tbl track" id="roundTable"></table></div>
+    </section>
+
     <!-- TEAMS -->
     <section class="tab" id="tab-teams" hidden>
       <div class="card">
@@ -98,6 +114,22 @@
 
     <!-- SETTINGS -->
     <section class="tab" id="tab-settings" hidden>
+      <div class="card" id="welcomeCard">
+        <h3>رسالة الترحيب (قبل البداية)</h3>
+        <p class="mut small">الفرق بتشوفها وتسمعها في اللوبي قبل ما تبدأ اللعبة. سجّل VN أو ارفع ملف، واكتب رسالة قصيرة لو حابب.</p>
+        <label>نص الرسالة (اختياري)<textarea id="wText" rows="2"></textarea></label>
+        <div class="audio-row">
+          <span class="chip" id="wChip">مفيش VN</span>
+          <button type="button" class="btn btn-sm btn-ghost" id="wPlay" hidden>▶ جرّب مع الأفاتار</button>
+          <button type="button" class="btn btn-sm btn-ghost" id="wRec">🎙 سجّل VN</button>
+          <label class="btn btn-sm btn-ghost">📁 ارفع ملف<input type="file" accept="audio/*" id="wFile" hidden></label>
+          <button type="button" class="btn btn-sm btn-ghost danger" id="wDel" hidden>🗑</button>
+        </div>
+        <div class="row">
+          <button type="button" class="btn btn-red" id="wSave">حفظ الرسالة</button>
+          <button type="button" class="btn btn-warn" id="wPing">📣 نادي الفرق يسمعوا</button>
+        </div>
+      </div>
       <div class="card" id="hostCard">
         <h3>شخصية المضيف</h3>
         <p class="mut small">ارفع صورة الشخصية (نسختك المرخّصة) ودوس مرة واحدة على بقّه في الصورة. البق والدقن هيتحركوا مع الـ VN. من غير صورة هتشتغل الشخصية المرسومة.</p>

@@ -7,6 +7,7 @@ import {
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   doc, getDoc, getDocs, onSnapshot, updateDoc, setDoc, collection, query, orderBy, serverTimestamp,
+  runTransaction, getDocFromServer,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { createAvatar } from "./avatar.js";
 
@@ -29,6 +30,7 @@ const activeChallenges = () => challenges.filter((c) => c.active !== false);
 $("#ringFg").style.strokeDasharray = RING_C;
 
 /* ================= AUTH ================= */
+try { const pre = new URLSearchParams(location.search).get("u"); if (pre) { $("#lgUser").value = pre; setTimeout(() => $("#lgPass").focus(), 300); } } catch { /* ignore */ }
 function showAdminHint() {
   $("#loginErr").innerHTML = `${esc(tr("ده حساب الأدمن — افتح صفحة admin.html"))}<br><a class="btn btn-ghost btn-sm" style="margin-top:8px" href="admin.html">${esc(tr("افتح صفحة الأدمن"))} →</a>`;
 }
@@ -132,7 +134,11 @@ function render() {
   $("#pausedOverlay").hidden = st !== "paused";
   syncPause(st);
   if (team.finished) { go("done"); return; }
-  const cur = team.current;
+  let cur = team.current;
+  if (cur && (!cur.phase || !cur.cid)) {           // broken half-state → repair
+    updateDoc(tRef(), { current: null }).catch(console.error);
+    cur = null;
+  }
   if (!cur) { go("wait"); return; }
   go(cur.phase, `${cur.phase}|${cur.cid}|${cur.attempt}`);
 }
@@ -176,7 +182,7 @@ function enter(name) {
 
 function refresh(name) {
   switch (name) {
-    case "lobby": $("#lobbyTeam").textContent = team.name || ""; break;
+    case "lobby": $("#lobbyTeam").textContent = team.name || ""; refreshWelcome(); break;
     case "wait": tryAllocate(); break;
     case "intro": setTitles(); updateStartBtn(); break;
     case "retry": setTitles(); $("#btnRetry").disabled = settings.status !== "running"; break;
@@ -315,6 +321,7 @@ function closeTheater() {
   th.hidden = true;
   try { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); } catch { /* ignore */ }
   if (curKey && curKey.startsWith("intro")) mountAvatar("#avIntro");
+  else if (curKey === "lobby") mountAvatar("#avLobby");
 }
 $("#thClose").onclick = () => closeTheater();
 
@@ -480,13 +487,13 @@ async function submitEvidence() {
   if (attemptMs >= cur.limitMs) return;
   $("#btnSubmit").disabled = true;
   clearInterval(tickTimer); tickTimer = null;
+  const subRef = doc(collection(db, "submissions"));
   try {
-    // freeze the timer first, then upload
-    await updateDoc(tRef(), { "current.phase": "pending", "current.elapsedMs": attemptMs, "current.startedAt": null });
+    // freeze the timer first (and remember the submission id), then upload
+    await updateDoc(tRef(), { "current.phase": "pending", "current.elapsedMs": attemptMs, "current.startedAt": null, "current.submissionId": subRef.id });
   } catch (e) { console.error(e); toast("حصلت مشكلة في الشبكة… جربوا تاني", "bad"); $("#btnSubmit").disabled = false; return; }
   setUploading(true, 0);
   try {
-    const subRef = doc(collection(db, "submissions"));
     const b64 = await blobToB64(ev.blob);
     const n = await writeChunks(`submissions/${subRef.id}`, b64, (p) => setUploading(true, p));
     await setDoc(subRef, {
@@ -494,13 +501,18 @@ async function submitEvidence() {
       attempt: cur.attempt || 1, attemptMs, totalMs: attemptMs + (cur.prevElapsedMs || 0),
       kind: ev.kind, mime: ev.mime, chunks: n, status: "pending", createdAt: serverTimestamp(),
     });
-    await updateDoc(tRef(), { "current.submissionId": subRef.id });
     toast("📨 الدليل اتبعت", "good");
   } catch (e) {
     console.error(e);
     toast("الرفع فشل… جربوا تاني", "bad");
     keepEvidence = ev;
-    await updateDoc(tRef(), { "current.phase": "playing", "current.startedAt": Date.now() }).catch(console.error);
+    // only go back to playing if the judge hasn't already decided
+    await runTransaction(db, async (tx) => {
+      const s2 = await tx.get(tRef()); const c2 = s2.data()?.current;
+      if (c2 && c2.phase === "pending" && c2.submissionId === subRef.id) {
+        tx.update(tRef(), { "current.phase": "playing", "current.startedAt": Date.now() });
+      }
+    }).catch(console.error);
   } finally { setUploading(false); }
 }
 
@@ -575,3 +587,60 @@ function confetti() {
   };
   requestAnimationFrame(frame);
 }
+
+/* ================= SAFETY NET for weak mobile connections =================
+   Live updates can stall on some mobile networks. While a team is waiting
+   (for the judge or for a free challenge) re-check the server every 5 s,
+   and always re-check when the phone comes back to the app. */
+async function resync() {
+  if (!uid) return;
+  try {
+    const [t, g] = await Promise.all([getDocFromServer(tRef()), getDocFromServer(doc(db, "settings", "game"))]);
+    const nt = t.data() || null, ng = g.exists() ? g.data() : null;
+    let changed = false;
+    if (JSON.stringify(nt) !== JSON.stringify(team)) { prevTeam = team; team = nt; announce(); changed = true; }
+    if (JSON.stringify(ng) !== JSON.stringify(settings)) { settings = ng; changed = true; }
+    if (changed) render();
+  } catch (e) { /* offline — try again later */ }
+}
+let syncTick = 0;
+setInterval(() => {
+  syncTick++;
+  if (document.hidden || !team) return;
+  if (settings?.status === "lobby" && syncTick % 2) return;   // lobby: every 10 s is enough
+  const ph = team.current?.phase;
+  if (ph === "pending" || (!team.current && settings?.status === "running" && !team.finished) || settings?.status === "lobby") resync();
+}, 5000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) resync(); });
+window.addEventListener("online", resync);
+
+/* ================= WELCOME MESSAGE in the lobby ================= */
+let lastPing = null;
+function refreshWelcome() {
+  const w = settings?.welcome || {};
+  $("#welcomeText").hidden = !w.text; $("#welcomeText").textContent = w.text || "";
+  $("#btnWelcome").hidden = !w.audioChunks;
+  if (w.audioChunks) getMediaBlobUrl("media/welcome", w.audioChunks, w.audioMime || "audio/mpeg", w.audioVer).catch(() => {});
+  if (lastPing === null) lastPing = w.ping || 0;                 // don't ring for an old call
+  else if (w.ping && w.ping > lastPing) {
+    lastPing = w.ping;
+    if (w.audioChunks && settings.status === "lobby") {
+      $("#callFx").hidden = false;
+      [660, 880, 990].forEach((f, i) => setTimeout(() => beep(f, 0.15, 0.18), i * 180));
+      navigator.vibrate?.([200, 100, 200]);
+    }
+  }
+}
+async function playWelcome() {
+  $("#callFx").hidden = true;
+  const w = settings?.welcome || {};
+  if (!w.audioChunks) return;
+  const btn = $("#btnWelcome"); btn.disabled = true;
+  try {
+    const url = await getMediaBlobUrl("media/welcome", w.audioChunks, w.audioMime || "audio/mpeg", w.audioVer);
+    openTheater({ kind: "audio", url }, settings.eventTitle || "El Le3ba", () => {});
+  } catch (e) { console.error(e); }
+  btn.disabled = false;
+}
+$("#btnWelcome").onclick = playWelcome;
+$("#btnCallListen").onclick = playWelcome;

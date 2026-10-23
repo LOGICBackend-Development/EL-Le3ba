@@ -343,3 +343,19 @@ html:not(.i18n-ready) body{visibility:hidden}
 .hero .stage{max-width:none;aspect-ratio:4/3.4;border-radius:22px}
 .hero .stage::before{content:"";position:absolute;inset:auto 0 0 0;height:30%;background:linear-gradient(0deg,rgba(11,12,62,.75),transparent);z-index:1;pointer-events:none}
 #scr-intro .hero .stage{aspect-ratio:4/3.6}
+
+.welcome-text{text-align:center;font-weight:700;font-size:17px;margin:10px 4px;padding:12px;border-radius:16px;background:rgba(255,255,255,.08)}
+#btnWelcome{margin-top:6px;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{box-shadow:0 10px 26px rgba(240,96,154,.38)}50%{box-shadow:0 0 0 10px rgba(240,96,154,.15),0 10px 26px rgba(240,96,154,.5)}}
+.call-fx{z-index:86}
+.call-fx .big-emoji{animation:bob 1s ease-in-out infinite}
+
+/* tracking */
+.legend{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 10px}
+.legend .tk{padding:4px 10px;border-radius:99px;font-size:12px;font-weight:800}
+.tbl.track td,.tbl.track th{white-space:nowrap;font-size:13px;vertical-align:top}
+.tk.done{background:rgba(47,211,138,.18);color:#9ff0c9}
+.tk.fail{background:rgba(255,77,106,.18);color:#ffb3c2}
+.tk.now{background:linear-gradient(120deg,rgba(143,79,224,.5),rgba(240,96,154,.5));color:#fff;font-weight:800}
+.tk.next{outline:2px dashed rgba(247,196,138,.7);outline-offset:-3px}
+.legend .tk.next{outline-offset:0}

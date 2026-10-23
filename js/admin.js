@@ -2,7 +2,7 @@ import { t as tr } from "./i18n.js";
 import {
   auth, db, firebaseConfig, ADMIN_EMAIL, teamEmail, fmt, elapsedOf, finishChallenge, cleanSlots,
   blobToB64, b64ToBlob, writeChunks, readChunks, deleteChunks, esc, toast, beep, pointsFor,
-  DEFAULT_SETTINGS, DEFAULT_CHALLENGES, TEAM_COLORS, compressImage, loadHostPhoto, DEFAULT_MOUTH,
+  DEFAULT_SETTINGS, DEFAULT_CHALLENGES, TEAM_COLORS, compressImage, loadHostPhoto, DEFAULT_MOUTH, makeRoutes,
   authErrorText,
 } from "./common.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -80,7 +80,7 @@ async function ensureDefaults() {
 function subscribe() {
   unsubs.push(onSnapshot(sRef, (s) => {
     settings = { ...DEFAULT_SETTINGS, ...(s.data() || {}) };
-    renderControl(); fillSettings(); syncHost();
+    renderControl(); fillSettings(); syncHost(); fillWelcome();
   }));
   unsubs.push(onSnapshot(collection(db, "teams"), (s) => {
     teams = {}; s.docs.forEach((d) => { teams[d.id] = { id: d.id, ...d.data() }; });
@@ -134,6 +134,7 @@ function renderControl() {
       <small>${ids.map((id) => esc(teams[id]?.name || "؟")).join("، ") || "فاضي"}</small></div>`;
   }).join("");
 
+  try { renderTracking(); } catch (e) { console.error("tracking", e); }
   $("#teamGrid").innerHTML = list.length ? list.map(cardHtml).join("") :
     `<div class="empty">مفيش فرق لسه — روح تبويب "الفرق" وجهّزهم</div>`;
   updateTimers();
@@ -171,6 +172,8 @@ $("#btnStartS").onclick = async () => {
   const list = teamList(), on = list.filter((t) => isOnline(t.id)).length;
   if (!list.length) { toast("جهّز الفرق الأول", "warn"); return; }
   if (on < list.length && !confirm(tr("{on} من {all} فرق بس متصلين. تبدأ برضه؟", { on, all: list.length }))) return;
+  const ids = activeChallenges().map((c) => c.id);
+  if (list.some((t) => !t.route || ids.some((id) => !t.route.includes(id)))) await generateRoutes(true);
   await updateDoc(sRef, { status: "running" });
 };
 $("#btnPauseS").onclick = () => updateDoc(sRef, { status: "paused" });
@@ -567,19 +570,42 @@ $("#btnGenTeams").onclick = async () => {
 };
 
 $("#btnPrint").onclick = () => {
-  const url = new URL("index.html", location.href).href;
+  const base = new URL("index.html", location.href).href;
+  const logo = new URL("assets/logo.webp", location.href).href;
   const cards = teamList().map((t) => {
     const c = creds[t.id] || {};
-    return `<div class="c"><h2>${esc(t.name)}</h2><p>${tr("اليوزر:")} <b>${esc(c.username || t.username)}</b></p>
-      <p>${tr("الباسورد:")} <b>${esc(c.password || "—")}</b></p><small>${esc(url)}</small></div>`;
+    const user = c.username || t.username;
+    return `<div class="c">
+      <div class="top"><img src="${logo}" class="lg" alt=""><h2>${esc(t.name)}</h2></div>
+      <div class="qr" data-url="${esc(`${base}?u=${encodeURIComponent(user)}`)}"></div>
+      <div class="scan">${esc(tr("امسح الكود عشان تدخل اللعبة"))}</div>
+      <p>${tr("اليوزر:")} <b>${esc(user)}</b></p>
+      <p>${tr("الباسورد:")} <b>${esc(c.password || "—")}</b></p></div>`;
   }).join("");
   const w = window.open("", "_blank");
   if (!w) { toast("اسمح بالـ popups عشان تطبع", "warn"); return; }
   w.document.write(`<!doctype html><html dir="${document.documentElement.dir}"><head><meta charset="utf-8"><title>${tr("كروت الدخول")}</title>
-    <style>body{font-family:Cairo,Arial,sans-serif;margin:16px}.g{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
-    .c{border:2px dashed #111;border-radius:12px;padding:14px;break-inside:avoid}h2{margin:0 0 8px;color:#c4102a}
-    p{margin:4px 0;font-size:16px}b{font-family:monospace;font-size:18px;direction:ltr;unicode-bidi:embed}small{color:#555;word-break:break-all}</style>
-    </head><body><div class="g">${cards}</div><script>setTimeout(()=>print(),400)<\/script></body></html>`);
+    <style>
+      body{font-family:Cairo,Arial,sans-serif;margin:12px;color:#14154f}
+      .g{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+      .c{border:2px dashed #8f4fe0;border-radius:16px;padding:12px;break-inside:avoid;text-align:center}
+      .top{display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:6px}
+      .lg{width:38px;height:auto}
+      h2{margin:0;font-size:20px;color:#c13a8e}
+      .qr{display:flex;justify-content:center;margin:6px 0}.qr img,.qr canvas{width:150px!important;height:150px!important}
+      .scan{font-size:12px;color:#666;margin-bottom:6px}
+      p{margin:3px 0;font-size:15px}
+      b{font-family:monospace;font-size:18px;direction:ltr;unicode-bidi:embed}
+      @media print{.c{page-break-inside:avoid}}
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
+    </head><body><div class="g">${cards}</div>
+    <script>
+      window.onload = () => {
+        document.querySelectorAll(".qr").forEach((el) => new QRCode(el, { text: el.dataset.url, width: 300, height: 300, correctLevel: QRCode.CorrectLevel.M }));
+        setTimeout(() => print(), 700);
+      };
+    <\/script></body></html>`);
   w.document.close();
 };
 
@@ -692,3 +718,120 @@ $("#hostTest").onclick = async () => {
     avatar.speak(url, () => URL.revokeObjectURL(url));
   } catch (err) { console.error(err); toast("مش قادرين نشغّل الـ VN", "bad"); }
 };
+
+/* ================= WELCOME MESSAGE (lobby) ================= */
+let wRecState = null;
+function fillWelcome() {
+  const w = settings?.welcome || {};
+  if (document.activeElement !== $("#wText")) $("#wText").value = w.text || "";
+  $("#wChip").textContent = w.audioChunks ? tr("🎙 فيه VN") : tr("مفيش VN");
+  $("#wChip").classList.toggle("ok", !!w.audioChunks);
+  $("#wPlay").hidden = $("#wDel").hidden = !w.audioChunks;
+  $("#wRec").textContent = wRecState ? tr("⏹ وقّف وسجّل") : tr("🎙 سجّل VN");
+}
+async function saveWelcomeAudio(blob, mime) {
+  if (blob.size > 4 * 1024 * 1024) { toast("الملف أكبر من 4MB — صغّره أو قصّره", "bad"); return; }
+  toast("بنرفع الـ VN…");
+  try {
+    const old = settings.welcome?.audioChunks || 0;
+    const n = await writeChunks("media/welcome", await blobToB64(blob));
+    if (old > n) await deleteChunks("media/welcome", old, n);
+    await updateDoc(sRef, { "welcome.audioChunks": n, "welcome.audioMime": mime, "welcome.audioVer": Date.now() });
+    toast("الـ VN اتحفظ ✓", "good");
+  } catch (e) { console.error(e); toast("الرفع فشل", "bad"); }
+}
+$("#wFile").onchange = async (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) await saveWelcomeAudio(f, f.type || "audio/mpeg"); };
+$("#wRec").onclick = async () => {
+  if (wRecState) { wRecState.recorder.stop(); return; }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const types = ["audio/mp4", "audio/mpeg", "audio/webm;codecs=opus", "audio/webm"];
+    const mimeType = types.find((t) => MediaRecorder.isTypeSupported(t)) || "";
+    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+    const chunks = [];
+    recorder.ondataavailable = (ev) => ev.data.size && chunks.push(ev.data);
+    recorder.onstop = async () => {
+      stream.getTracks().forEach((t) => t.stop());
+      const type = (recorder.mimeType || mimeType || "audio/webm").split(";")[0];
+      wRecState = null; fillWelcome();
+      await saveWelcomeAudio(new Blob(chunks, { type }), type);
+    };
+    recorder.start(500); wRecState = { recorder }; fillWelcome();
+    toast("🎙 بيسجّل… دوس وقّف لما تخلص", "warn");
+  } catch (e) { console.error(e); toast("مش قادرين نفتح المايك", "bad"); }
+};
+$("#wPlay").onclick = async () => {
+  const w = settings.welcome;
+  try {
+    const url = URL.createObjectURL(b64ToBlob(await readChunks("media/welcome", w.audioChunks), w.audioMime || "audio/mpeg"));
+    avatar.setMode("full"); $("#avPreview").appendChild(avatar.el); $("#avModal").hidden = false;
+    avatar.speak(url, () => URL.revokeObjectURL(url));
+  } catch (e) { console.error(e); toast("مش قادرين نشغّل الملف", "bad"); }
+};
+$("#wDel").onclick = async () => {
+  if (!confirm(tr("مسح الـ VN؟"))) return;
+  await deleteChunks("media/welcome", settings.welcome?.audioChunks || 0);
+  await updateDoc(sRef, { "welcome.audioChunks": 0, "welcome.audioVer": Date.now() });
+};
+$("#wSave").onclick = async () => { await updateDoc(sRef, { "welcome.text": $("#wText").value.trim() }); toast("اتحفظ ✓", "good"); };
+$("#wPing").onclick = async () => {
+  await updateDoc(sRef, { "welcome.text": $("#wText").value.trim(), "welcome.ping": Date.now() });
+  toast("📣 الفرق اللي في اللوبي هتسمع تنبيه", "good");
+};
+
+/* ================= ROUTES & TRACKING ================= */
+async function generateRoutes(silent = false) {
+  const list = teamList(), ch = activeChallenges();
+  if (!list.length || !ch.length) { toast("جهّز الفرق الأول", "warn"); return; }
+  const started = list.some((t) => (t.done || []).length || t.current);
+  if (!silent && started && !confirm(tr("اللعبة بدأت. المسارات الجديدة هتطبق على التحديات اللي لسه. تكمّل؟"))) return;
+  const { routes, strict } = makeRoutes(list.map((t) => t.id), ch.map((c) => c.id), settings.sets);
+  const b = writeBatch(db);
+  list.forEach((t) => b.update(doc(db, "teams", t.id), { route: routes[t.id] }));
+  b.update(sRef, { routeStrict: strict, routesAt: Date.now() });
+  await b.commit();
+  if (!silent) toast("المسارات اتعملت ✓", "good");
+}
+$("#btnRoutes").onclick = () => generateRoutes(false);
+
+function renderTracking() {
+  if (!settings || !$("#trackTable")) return;
+  const list = teamList(), ch = activeChallenges(), n = ch.length, cap = Math.max(1, Number(settings.sets) || 1);
+  const name = (id) => esc(chal(id)?.name || "؟");
+  const hasRoutes = list.length && list.every((t) => t.route && t.route.length);
+  $("#trackInfo").textContent = !hasRoutes ? tr("المسارات لسه متعملتش — هتتعمل لوحدها لما تدوس ابدأ، أو دوس الزرار.")
+    : settings.routeStrict === false ? tr("عدد الفرق أكبر من التحديات × الـ Sets — لو التحدي الجاي مشغول الفريق بياخد أقرب تحدي فاضي.")
+    : tr("كل فريق بيمشي على مساره بالترتيب. لو التحدي الجاي لسه مشغول، الفريق بيستنى لحد ما يفضى.");
+  // team × round
+  let h = `<thead><tr><th>${tr("الفريق")}</th>${Array.from({ length: n }, (_, i) => `<th>${tr("راوند {n}", { n: i + 1 })}</th>`).join("")}<th>${tr("النقط")}</th></tr></thead><tbody>`;
+  list.forEach((t) => {
+    const route = t.route || [];
+    const res = t.results || {};
+    const order = [...route, ...ch.map((c) => c.id).filter((id) => !route.includes(id))].slice(0, n);
+    const firstNext = order.find((id) => !res[id] && t.current?.cid !== id);
+    h += `<tr><td><i class="odot ${isOnline(t.id) ? "on" : ""}"></i> <b>${esc(t.name)}</b></td>`;
+    order.forEach((id, i) => {
+      const r = res[id];
+      let cls = "", txt = name(id);
+      if (r) { cls = r.status === "passed" ? "done" : "fail"; txt = `${r.status === "passed" ? "✓" : "✗"} ${txt}${r.status === "passed" ? ` <small>+${r.points}</small>` : ""}`; }
+      else if (t.current?.cid === id) { cls = "now"; txt = `▶ ${txt}`; }
+      else if (id === firstNext) cls = "next";
+      const moved = r && r.round && r.round !== i + 1 ? ` <small class="mut">(R${r.round})</small>` : "";
+      h += `<td class="tk ${cls}">${txt}${moved}</td>`;
+    });
+    h += `<td><b>${t.score || 0}</b></td></tr>`;
+  });
+  $("#trackTable").innerHTML = list.length ? h + "</tbody>" : `<tr><td class="mut">${tr("مفيش فرق لسه")}</td></tr>`;
+  // round × challenge (planned)
+  if (!hasRoutes) { $("#roundTable").innerHTML = ""; return; }
+  let r = `<thead><tr><th>${tr("التحدي")}</th>${Array.from({ length: n }, (_, i) => `<th>${tr("راوند {n}", { n: i + 1 })}</th>`).join("")}</tr></thead><tbody>`;
+  ch.forEach((c) => {
+    r += `<tr><td><b>${esc(c.name)}</b></td>`;
+    for (let i = 0; i < n; i++) {
+      const teamsHere = list.filter((t) => t.route[i] === c.id);
+      r += `<td class="${teamsHere.length > cap ? "tk fail" : ""}">${teamsHere.map((t) => esc(t.name)).join("<br>") || "—"}</td>`;
+    }
+    r += "</tr>";
+  });
+  $("#roundTable").innerHTML = r + "</tbody>";
+}
