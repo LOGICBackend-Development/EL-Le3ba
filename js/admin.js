@@ -96,7 +96,7 @@ function subscribe() {
   }));
   unsubs.push(onSnapshot(collection(db, "credentials"), (s) => {
     creds = {}; s.docs.forEach((d) => { creds[d.id] = d.data(); });
-    renderTeamsTab();
+    renderTeamsTab(); renderControl();
   }));
   unsubs.push(onSnapshot(doc(db, "state", "occupancy"), (s) => { occ = s.data()?.slots || {}; renderControl(); }));
   unsubs.push(onSnapshot(query(collection(db, "submissions"), where("status", "==", "pending")), onSubs));
@@ -140,6 +140,16 @@ function renderControl() {
   updateTimers();
 }
 
+// Facilitator info lives in the admin-only credentials doc (teams can't see phone numbers).
+function facHtml(id, compact = false) {
+  const c = creds[id] || {};
+  if (!c.fac && !c.facPhone) return compact ? "" : `<div class="tc-fac mut small">👤 ${tr("مفيش ميسّر")}</div>`;
+  const raw = String(c.facPhone || "").replace(/[^\d+]/g, "");
+  const wa = raw ? raw.replace(/^\+/, "").replace(/^0(?=1\d{9}$)/, "20") : "";
+  const btns = raw ? `<a class="fac-btn" href="tel:${raw}" title="${esc(tr("اتصل"))}">📞</a><a class="fac-btn wa" href="https://wa.me/${wa}" target="_blank" rel="noopener" title="WhatsApp">💬</a>` : "";
+  return `<div class="tc-fac"><span>👤 <b>${esc(c.fac || "—")}</b>${raw && !compact ? ` <span class="mut small" dir="ltr">${esc(c.facPhone)}</span>` : ""}</span>${btns}</div>`;
+}
+
 function cardHtml(t) {
   const cur = t.current, ch = cur ? chal(cur.cid) : null;
   let state;
@@ -147,11 +157,13 @@ function cardHtml(t) {
   else if (!cur) state = settings.status === "lobby" ? "في اللوبي" : "مستني تحدي يفضى";
   else state = `<b>${esc(ch?.name || "؟")}</b> · ${tr(PHASE[cur.phase] || cur.phase)}${cur.attempt > 1 && cur.phase !== "retry" ? ` · ${tr("فرصة أخيرة")}` : ""}`;
   return `<div class="tcard ${cur?.phase === "pending" ? "pending" : ""}" style="--c:${t.color || "#888"}">
-    <div class="tc-top"><i class="odot ${isOnline(t.id) ? "on" : ""}"></i><b class="tc-name">${esc(t.name)}</b><span class="tc-score">${t.score || 0}</span></div>
+    <div class="tc-top"><i class="odot ${isOnline(t.id) ? "on" : ""}"></i><b class="tc-name">${esc(t.name)}</b><span class="tc-score">${t.score || 0}${t.adjust ? `<small class="adj">${t.adjust > 0 ? "+" : ""}${t.adjust}</small>` : ""}</span></div>
     <div class="tc-state">${state}</div>
+    ${facHtml(t.id)}
     <div class="tc-row"><span class="tc-timer" data-timer="${t.id}"></span><span class="mut small">${tr("{a}/{b} تحدي", { a: (t.done || []).length, b: activeChallenges().length })}</span></div>
     <div class="tc-actions">
       ${cur ? `<button class="btn btn-sm btn-ghost" data-act="skip" data-id="${t.id}">تخطي التحدي</button>` : ""}
+      <button class="btn btn-sm btn-ghost" data-act="score" data-id="${t.id}">✎ ${tr("النقط")}</button>
       <button class="btn btn-sm btn-ghost" data-act="resetTeam" data-id="${t.id}">ريست الفريق</button>
     </div></div>`;
 }
@@ -183,7 +195,7 @@ $("#btnResetS").onclick = async () => {
   if (!confirm(tr("آخر تأكيد — مفيش رجوع."))) return;
   const b = writeBatch(db);
   teamList().forEach((t) => b.update(doc(db, "teams", t.id), {
-    score: 0, totalTimeMs: 0, done: [], results: {}, current: null, finished: false,
+    score: 0, totalTimeMs: 0, done: [], results: {}, current: null, finished: false, adjust: 0, adjustLog: [],
   }));
   b.set(doc(db, "state", "occupancy"), { slots: {} });
   b.update(sRef, { status: "lobby" });
@@ -196,6 +208,7 @@ $("#lbToggle").onchange = (e) => updateDoc(sRef, { leaderboardVisible: e.target.
 $("#teamGrid").addEventListener("click", async (e) => {
   const b = e.target.closest("button[data-act]"); if (!b) return;
   const t = teams[b.dataset.id]; if (!t) return;
+  if (b.dataset.act === "score") { openScore(t.id); return; }
   if (b.dataset.act === "skip") {
     if (!confirm(tr("تخطي التحدي الحالي لـ {name}؟ (هياخد صفر فيه)", { name: t.name }))) return;
     await Promise.all(subs.filter((s) => s.teamId === t.id).map(removeSubmission));
@@ -212,7 +225,7 @@ async function resetTeam(id) {
     const oRef = doc(db, "state", "occupancy");
     const o = await tx.get(oRef);
     tx.set(oRef, { slots: cleanSlots(o.exists() ? o.data().slots : {}, id) });
-    tx.update(doc(db, "teams", id), { score: 0, totalTimeMs: 0, done: [], results: {}, current: null, finished: false });
+    tx.update(doc(db, "teams", id), { score: 0, totalTimeMs: 0, done: [], results: {}, current: null, finished: false, adjust: 0, adjustLog: [] });
   });
 }
 
@@ -505,14 +518,22 @@ function renderTeamsTab() {
     return `<tr data-id="${t.id}">
       <td><i class="odot ${isOnline(t.id) ? "on" : ""}"></i></td>
       <td><input class="f-tname" value="${esc(t.name)}" style="border-color:${t.color || "var(--line)"}"></td>
+      <td><input class="f-fac" value="${esc(c.fac || "")}" placeholder="${esc(tr("اسم الميسّر"))}"></td>
+      <td><input class="f-facp" value="${esc(c.facPhone || "")}" placeholder="01xxxxxxxxx" dir="ltr" inputmode="tel"></td>
       <td dir="ltr" class="mono">${esc(c.username || t.username || "")}</td>
       <td dir="ltr" class="mono">${esc(c.password || "—")}</td>
       <td>${t.score || 0}</td>
       <td><button class="btn btn-sm btn-ghost danger" data-act="delTeam">مسح</button></td></tr>`;
-  }).join("") || `<tr><td colspan="6" class="mut center">مفيش فرق لسه</td></tr>`;
+  }).join("") || `<tr><td colspan="8" class="mut center">مفيش فرق لسه</td></tr>`;
 }
 
 $("#teamRows").addEventListener("change", async (e) => {
+  if (e.target.matches(".f-fac, .f-facp")) {
+    const id = e.target.closest("tr").dataset.id;
+    const field = e.target.matches(".f-fac") ? "fac" : "facPhone";
+    await setDoc(doc(db, "credentials", id), { [field]: e.target.value.trim() }, { merge: true });
+    e.target.blur(); toast("اتحفظ ✓", "good"); return;
+  }
   if (!e.target.matches(".f-tname")) return;
   const id = e.target.closest("tr").dataset.id, name = e.target.value.trim();
   if (name) { await updateDoc(doc(db, "teams", id), { name }); e.target.blur(); toast("اتحفظ ✓", "good"); }
@@ -580,7 +601,8 @@ $("#btnPrint").onclick = () => {
       <div class="qr" data-url="${esc(`${base}?u=${encodeURIComponent(user)}`)}"></div>
       <div class="scan">${esc(tr("امسح الكود عشان تدخل اللعبة"))}</div>
       <p>${tr("اليوزر:")} <b>${esc(user)}</b></p>
-      <p>${tr("الباسورد:")} <b>${esc(c.password || "—")}</b></p></div>`;
+      <p>${tr("الباسورد:")} <b>${esc(c.password || "—")}</b></p>
+      ${c.fac ? `<p class="fac">${tr("الميسّر:")} ${esc(c.fac)}</p>` : ""}</div>`;
   }).join("");
   const w = window.open("", "_blank");
   if (!w) { toast("اسمح بالـ popups عشان تطبع", "warn"); return; }
@@ -594,6 +616,7 @@ $("#btnPrint").onclick = () => {
       h2{margin:0;font-size:20px;color:#c13a8e}
       .qr{display:flex;justify-content:center;margin:6px 0}.qr img,.qr canvas{width:150px!important;height:150px!important}
       .scan{font-size:12px;color:#666;margin-bottom:6px}
+      .fac{font-size:13px;color:#555;margin-top:6px}
       p{margin:3px 0;font-size:15px}
       b{font-family:monospace;font-size:18px;direction:ltr;unicode-bidi:embed}
       @media print{.c{page-break-inside:avoid}}
@@ -847,7 +870,7 @@ function renderTracking() {
     const res = t.results || {};
     const order = [...route, ...ch.map((c) => c.id).filter((id) => !route.includes(id))].slice(0, n);
     const firstNext = order.find((id) => !res[id] && t.current?.cid !== id);
-    h += `<tr><td><i class="odot ${isOnline(t.id) ? "on" : ""}"></i> <b>${esc(t.name)}</b></td>`;
+    h += `<tr><td><i class="odot ${isOnline(t.id) ? "on" : ""}"></i> <b>${esc(t.name)}</b>${facHtml(t.id, true)}</td>`;
     order.forEach((id, i) => {
       const r = res[id];
       let cls = "", txt = name(id);
@@ -857,7 +880,7 @@ function renderTracking() {
       const moved = r && r.round && r.round !== i + 1 ? ` <small class="mut">(R${r.round})</small>` : "";
       h += `<td class="tk ${cls}">${txt}${moved}</td>`;
     });
-    h += `<td><b>${t.score || 0}</b></td></tr>`;
+    h += `<td><b>${t.score || 0}</b>${t.adjust ? ` <small class="adj">(${t.adjust > 0 ? "+" : ""}${t.adjust} ✎)</small>` : ""}</td></tr>`;
   });
   $("#trackTable").innerHTML = list.length ? h + "</tbody>" : `<tr><td class="mut">${tr("مفيش فرق لسه")}</td></tr>`;
   // round × challenge (planned)
@@ -873,3 +896,44 @@ function renderTracking() {
   });
   $("#roundTable").innerHTML = r + "</tbody>";
 }
+
+/* ================= MANUAL SCORE EDIT ================= */
+let scoreTeam = null;
+function openScore(id) {
+  const t = teams[id]; if (!t) return;
+  scoreTeam = id;
+  $("#scName").textContent = t.name;
+  $("#scNow").textContent = t.score || 0;
+  $("#scNew").value = t.score || 0;
+  $("#scWhy").value = "";
+  const log = (t.adjustLog || []).slice(-5).reverse();
+  $("#scLog").innerHTML = log.map((l) => `<li><b class="${l.delta >= 0 ? "pos" : "neg"}">${l.delta >= 0 ? "+" : ""}${l.delta}</b> ${esc(l.reason || "")} <small class="mut">${new Date(l.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</small></li>`).join("");
+  $("#scoreModal").hidden = false;
+  setTimeout(() => $("#scNew").select(), 50);
+}
+$("#scoreModal").addEventListener("click", (e) => {
+  const q = e.target.closest("button[data-q]");
+  if (q) $("#scNew").value = (Number($("#scNew").value) || 0) + Number(q.dataset.q);
+  if (e.target === $("#scoreModal")) $("#scoreModal").hidden = true;
+});
+$("#scClose").onclick = () => { $("#scoreModal").hidden = true; };
+$("#scSave").onclick = async () => {
+  const id = scoreTeam, target = Math.round(Number($("#scNew").value));
+  if (!id || !Number.isFinite(target)) return;
+  const reason = $("#scWhy").value.trim();
+  $("#scSave").disabled = true;
+  try {
+    await runTransaction(db, async (tx) => {
+      const r = doc(db, "teams", id), snap = await tx.get(r), t = snap.data();
+      const delta = target - (t.score || 0);
+      if (!delta) return;
+      tx.update(r, {
+        score: target, adjust: (t.adjust || 0) + delta,
+        adjustLog: [...(t.adjustLog || []), { delta, reason, at: Date.now() }].slice(-20),
+      });
+    });
+    $("#scoreModal").hidden = true;
+    toast(tr("النقط اتعدلت ✓ والترتيب اتحدّث"), "good");
+  } catch (e) { console.error(e); toast("حصلت مشكلة… جرب تاني", "bad"); }
+  $("#scSave").disabled = false;
+};
