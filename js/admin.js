@@ -2,7 +2,7 @@ import { t as tr } from "./i18n.js";
 import {
   auth, db, firebaseConfig, ADMIN_EMAIL, teamEmail, fmt, elapsedOf, finishChallenge, cleanSlots,
   blobToB64, b64ToBlob, writeChunks, readChunks, deleteChunks, esc, toast, beep, pointsFor,
-  DEFAULT_SETTINGS, DEFAULT_CHALLENGES, TEAM_COLORS, compressImage, loadHostPhoto, DEFAULT_MOUTH, makeRoutes,
+  DEFAULT_SETTINGS, DEFAULT_CHALLENGES, TEAM_COLORS, compressImage, loadHostPhoto, DEFAULT_MOUTH, makeRoutes, getMediaBlobUrl,
   authErrorText,
 } from "./common.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -80,7 +80,7 @@ async function ensureDefaults() {
 function subscribe() {
   unsubs.push(onSnapshot(sRef, (s) => {
     settings = { ...DEFAULT_SETTINGS, ...(s.data() || {}) };
-    renderControl(); fillSettings(); syncHost(); fillWelcome();
+    renderControl(); fillSettings(); syncHost(); fillWelcome(); syncLoops();
   }));
   unsubs.push(onSnapshot(collection(db, "teams"), (s) => {
     teams = {}; s.docs.forEach((d) => { teams[d.id] = { id: d.id, ...d.data() }; });
@@ -688,6 +688,7 @@ async function syncHost() {
     $("#hostW").value = hostLocal.mw;
     placeDot();
     avatar.setPhoto(p);
+    if (loopsLocal) avatar.setLoops(loopsLocal);
   } catch (e) { console.error(e); toast("مش قادرين نحمّل صورة الشخصية", "bad"); }
 }
 function placeDot() {
@@ -937,3 +938,64 @@ $("#scSave").onclick = async () => {
   } catch (e) { console.error(e); toast("حصلت مشكلة… جرب تاني", "bad"); }
   $("#scSave").disabled = false;
 };
+
+/* ================= MOTION CLIPS (idle / talking) ================= */
+let loopsKey = null, loopsLocal = null;
+async function syncLoops() {
+  const L = settings?.loops || {};
+  for (const k of ["idle", "talk"]) {
+    const slot = $(`.loop-slot[data-k="${k}"]`);
+    $(".loop-del", slot).hidden = !L[`${k}Chunks`];
+  }
+  const ready = L.idleChunks && L.talkChunks;
+  $("#loopTest").hidden = !ready;
+  const key = `${L.idleVer}|${L.talkVer}|${L.idleChunks}|${L.talkChunks}`;
+  if (key === loopsKey) return;
+  loopsKey = key;
+  try {
+    const urls = {};
+    for (const k of ["idle", "talk"]) {
+      const n = L[`${k}Chunks`], prev = $(`.loop-slot[data-k="${k}"] .loop-prev`);
+      urls[k] = n ? await getMediaBlobUrl(`media/loop_${k}`, n, L[`${k}Mime`] || "video/mp4", L[`${k}Ver`]) : null;
+      if (urls[k]) { prev.src = urls[k]; prev.play().catch(() => {}); prev.hidden = false; } else { prev.removeAttribute("src"); prev.hidden = true; }
+    }
+    loopsLocal = ready ? { idle: urls.idle, talk: urls.talk, fx: L.fx, fy: L.fy } : null;
+    avatar.setLoops(loopsLocal);
+  } catch (e) { console.error(e); toast("مش قادرين نحمّل الفيديو", "bad"); }
+}
+$("#loopCard").addEventListener("change", async (e) => {
+  if (!e.target.matches(".loop-file")) return;
+  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  const k = e.target.closest(".loop-slot").dataset.k;
+  if (f.size > 8 * 1024 * 1024) { toast(tr("الفيديو أكبر من 8MB — صغّره (720p و5 ثواني كفاية)"), "bad"); return; }
+  toast("بنرفع الفيديو… استنى شوية");
+  try {
+    const old = settings.loops?.[`${k}Chunks`] || 0;
+    const n = await writeChunks(`media/loop_${k}`, await blobToB64(f));
+    if (old > n) await deleteChunks(`media/loop_${k}`, old, n);
+    await updateDoc(sRef, { [`loops.${k}Chunks`]: n, [`loops.${k}Mime`]: f.type || "video/mp4", [`loops.${k}Ver`]: Date.now() });
+    toast("الفيديو اتحفظ ✓", "good");
+  } catch (err) { console.error(err); toast("الرفع فشل", "bad"); }
+});
+$("#loopCard").addEventListener("click", async (e) => {
+  const d = e.target.closest(".loop-del");
+  if (d) {
+    const k = d.closest(".loop-slot").dataset.k;
+    if (!confirm(tr("مسح الفيديو ده؟"))) return;
+    await deleteChunks(`media/loop_${k}`, settings.loops?.[`${k}Chunks`] || 0);
+    await updateDoc(sRef, { [`loops.${k}Chunks`]: 0, [`loops.${k}Ver`]: Date.now() });
+    return;
+  }
+  if (e.target.closest("#loopTest")) {
+    const c = challenges.find((x) => x.audioChunks);
+    const w = settings.welcome;
+    const src = c ? { path: `media/${c.id}`, n: c.audioChunks, mime: c.audioMime } : w?.audioChunks ? { path: "media/welcome", n: w.audioChunks, mime: w.audioMime } : null;
+    if (!src) { toast("سجّل VN لأي تحدي الأول", "warn"); return; }
+    try {
+      const url = URL.createObjectURL(b64ToBlob(await readChunks(src.path, src.n), src.mime || "audio/mpeg"));
+      avatar.setLoops(loopsLocal); avatar.setMode("full");
+      $("#avPreview").appendChild(avatar.el); $("#avModal").hidden = false;
+      avatar.speak(url, () => URL.revokeObjectURL(url));
+    } catch (err) { console.error(err); toast("مش قادرين نشغّل الـ VN", "bad"); }
+  }
+});

@@ -85,12 +85,22 @@ function teardown() {
 
 let hostKey = null;
 async function applyHost() {
-  const h = settings?.host;
-  const key = h?.chunks ? `${h.ver}|${h.mx}|${h.my}|${h.mw}` : "none";
+  const h = settings?.host, L = settings?.loops || {};
+  const hasLoops = !!(L.idleChunks && L.talkChunks);
+  const key = hasLoops ? `L|${L.idleVer}|${L.talkVer}|${L.fx}|${L.fy}` : h?.chunks ? `${h.ver}|${h.mx}|${h.my}|${h.mw}` : "none";
   if (key === hostKey) return;
-  hostKey = key;
   if (!$("#theater").hidden) return; // don't swap while talking
-  try { avatar.setPhoto(h?.chunks ? await loadHostPhoto(h) : null); } catch (e) { console.error(e); }
+  hostKey = key;
+  try {
+    if (hasLoops) {
+      const [idle, talk] = await Promise.all(["idle", "talk"].map((k) =>
+        getMediaBlobUrl(`media/loop_${k}`, L[`${k}Chunks`], L[`${k}Mime`] || "video/mp4", L[`${k}Ver`])));
+      avatar.setLoops({ idle, talk, fx: L.fx, fy: L.fy });
+    } else {
+      avatar.setLoops(null);
+      avatar.setPhoto(h?.chunks ? await loadHostPhoto(h) : null);
+    }
+  } catch (e) { console.error(e); hostKey = null; }
 }
 
 function heartbeat() {

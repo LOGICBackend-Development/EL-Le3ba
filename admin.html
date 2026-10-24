@@ -130,6 +130,25 @@
           <button type="button" class="btn btn-warn" id="wPing">📣 نادي الفرق يسمعوا</button>
         </div>
       </div>
+      <div class="card" id="loopCard">
+        <h3>🎬 حركة المضيف الحقيقية (فيديوهين قصيرين)</h3>
+        <p class="mut small">ارفع فيديوهين للمضيف (5 ثواني كل واحد، MP4، أقصى 8MB): واحد وهو ساكت وبيسمع، وواحد وهو بيتكلم وبيحرك إيده. التطبيق بيبدّل بينهم لوحده مع صوت الـ VN. لو الاتنين موجودين، بيتشغلوا بدل الصورة.</p>
+        <div class="loop-grid">
+          <div class="loop-slot" data-k="idle">
+            <b>😌 ساكت / بيسمع</b>
+            <video class="loop-prev" muted loop playsinline></video>
+            <div class="row"><label class="btn btn-sm btn-ghost">📁 ارفع MP4<input type="file" accept="video/mp4,video/*" class="loop-file" hidden></label>
+            <button type="button" class="btn btn-sm btn-ghost danger loop-del" hidden>🗑</button></div>
+          </div>
+          <div class="loop-slot" data-k="talk">
+            <b>🗣 بيتكلم</b>
+            <video class="loop-prev" muted loop playsinline></video>
+            <div class="row"><label class="btn btn-sm btn-ghost">📁 ارفع MP4<input type="file" accept="video/mp4,video/*" class="loop-file" hidden></label>
+            <button type="button" class="btn btn-sm btn-ghost danger loop-del" hidden>🗑</button></div>
+          </div>
+        </div>
+        <button type="button" class="btn btn-ghost" id="loopTest" hidden>▶ جرّب مع VN</button>
+      </div>
       <div class="card" id="hostCard">
         <h3>شخصية المضيف</h3>
         <p class="mut small">ارفع صورة الشخصية (نسختك المرخّصة) ودوس مرة واحدة على بقّه في الصورة. البق والدقن هيتحركوا مع الـ VN. من غير صورة هتشتغل الشخصية المرسومة.</p>

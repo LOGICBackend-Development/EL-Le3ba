@@ -254,10 +254,22 @@ function photoView(p, mode) {
 export function createAvatar() {
   const el = document.createElement("div");
   el.className = "avatar";
-  let mode = "card", photo = null, r = {};
+  let mode = "card", photo = null, loops = null, r = {};
   let ctx = null, audio = null, raf = 0, amp = 0, t0 = 0;
 
   function build() {
+    el.classList.toggle("is-loops", !!loops);
+    if (loops) {
+      // Real motion: two looping clips (listening / talking) cross-faded by the voice volume.
+      el.innerHTML = `<div class="vloop">
+        <video class="v-idle" src="${loops.idle}" muted loop playsinline autoplay preload="auto"></video>
+        <video class="v-talk" src="${loops.talk}" muted loop playsinline autoplay preload="auto"></video>
+      </div>`;
+      r = { idle: el.querySelector(".v-idle"), talk: el.querySelector(".v-talk"), wrap: el.querySelector(".vloop") };
+      [r.idle, r.talk].forEach((v) => { v.muted = true; v.play().catch(() => {}); });
+      applyMode(); setAmp(0);
+      return;
+    }
     el.innerHTML = photo ? photoSvg(photo) : SVG;
     el.classList.toggle("is-photo", !!photo);
     r = photo
@@ -271,11 +283,30 @@ export function createAvatar() {
     applyMode(); setAmp(0);
   }
   function applyMode() {
-    el.querySelector("svg").setAttribute("viewBox", photo ? photoView(photo, mode) : VIEW[mode] || VIEW.card);
     el.dataset.mode = mode;
+    if (loops) {
+      const z = mode === "full" ? 1 : (loops.zoom || 2.2);
+      r.wrap.style.transformOrigin = `${(loops.fx ?? 0.5) * 100}% ${(loops.fy ?? 0.22) * 100}%`;
+      r.wrap.style.transform = `scale(${z})`;
+      return;
+    }
+    el.querySelector("svg").setAttribute("viewBox", photo ? photoView(photo, mode) : VIEW[mode] || VIEW.card);
   }
 
+  let talkOn = false, quietSince = 0;
   function setAmp(a, t = 0) {
+    if (loops) {
+      const now = performance.now();
+      if (a > 0.12) {
+        quietSince = 0;
+        if (!talkOn) { talkOn = true; r.talk.style.opacity = "1"; r.talk.play().catch(() => {}); }
+      } else if (talkOn && a < 0.06) {
+        if (!quietSince) quietSince = now;
+        else if (now - quietSince > 380) { talkOn = false; r.talk.style.opacity = "0"; }
+      }
+      if (!t) { talkOn = false; quietSince = 0; r.talk.style.opacity = "0"; }
+      return;
+    }
     if (photo) {
       const mw = photo.mw, drop = a * mw * 0.2;
       r.jaw.setAttribute("transform", `translate(0 ${drop.toFixed(2)})`);
@@ -332,6 +363,7 @@ export function createAvatar() {
     return { gR: gR + idle, gL: gL - idle * 0.6, wave, fing };
   }
   function applyLife(now, a) {
+    if (loops) return;                 // real video already moves
     const L = lifeStep(now, a);
     if (photo) {                   // still picture: camera push-in + lean on strong moments
       const k = 1 + (now ? Math.sin(now / 2600) * 0.006 : 0) + life.punch * 0.035;
@@ -353,6 +385,8 @@ export function createAvatar() {
   function setMode(m) { mode = m; applyMode(); }
   // p = { url, W, H, mx, my, mw } in image pixels, or null for the drawn host
   function setPhoto(p) { stop(); photo = p; build(); }
+  // l = { idle: url, talk: url, fx, fy, zoom } or null
+  function setLoops(l) { stop(); loops = l && l.idle && l.talk ? l : null; build(); }
 
   function stop() {
     cancelAnimationFrame(raf);
@@ -398,5 +432,5 @@ export function createAvatar() {
   }
 
   build();
-  return { el, speak, stop, setMode, setPhoto, _setAmp: setAmp, _test: { life, applyLife } };
+  return { el, speak, stop, setMode, setPhoto, setLoops, _setAmp: setAmp, _test: { life, applyLife } };
 }
