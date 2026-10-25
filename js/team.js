@@ -7,7 +7,7 @@ import {
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   doc, getDoc, getDocs, onSnapshot, updateDoc, setDoc, collection, query, orderBy, serverTimestamp,
-  runTransaction, getDocFromServer,
+  runTransaction, getDocFromServer, deleteDoc,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { createAvatar, unlockAudio } from "./avatar.js";
 
@@ -30,6 +30,28 @@ const activeChallenges = () => challenges.filter((c) => c.active !== false);
 $("#ringFg").style.strokeDasharray = RING_C;
 
 /* ================= AUTH ================= */
+// Remote sign-out: the admin can sign every phone out (or one team) — and phones sign out by themselves
+// 30 minutes after the game ends, so forgotten phones don't stay online.
+const loginAt = () => { try { return Number(localStorage.getItem("le3ba-loginAt")) || 0; } catch { return 0; } };
+let kicking = false;
+async function kickOut(msg) {
+  if (kicking || !uid) return;
+  kicking = true;
+  const id = uid;
+  try { await deleteDoc(doc(db, "presence", id)); } catch { /* ignore */ }
+  try { localStorage.removeItem("le3ba-loginAt"); } catch { /* ignore */ }
+  try { sessionStorage.clear(); } catch { /* ignore */ }
+  await signOut(auth).catch(() => {});
+  kicking = false;
+  $("#loginErr").textContent = msg;
+}
+function checkKick() {
+  if (!uid) return;
+  const at = loginAt();
+  if ((settings?.kickAll || 0) > at || (team?.kickAt || 0) > at) { kickOut(tr("المنظّم قفل الجلسة. شكراً إنكم لعبتوا معانا 👋")); return; }
+  if (settings?.status === "ended" && settings?.endedAt && Date.now() - settings.endedAt > 30 * 60000) kickOut(tr("اللعبة خلصت — اتعمل خروج تلقائي."));
+}
+setInterval(checkKick, 60000);
 try { const pre = new URLSearchParams(location.search).get("u"); if (pre) { $("#lgUser").value = pre; setTimeout(() => $("#lgPass").focus(), 300); } } catch { /* ignore */ }
 function showAdminHint() {
   $("#loginErr").innerHTML = `${esc(tr("ده حساب الأدمن — افتح صفحة admin.html"))}<br><a class="btn btn-ghost btn-sm" style="margin-top:8px" href="admin.html">${esc(tr("افتح صفحة الأدمن"))} →</a>`;
@@ -40,6 +62,7 @@ $("#loginForm").addEventListener("submit", async (e) => {
   const btn = e.submitter; if (btn) btn.disabled = true;
   const who = $("#lgUser").value.trim();
   if (who.toLowerCase() === ADMIN_EMAIL.toLowerCase()) { showAdminHint(); if (btn) btn.disabled = false; return; }
+  try { localStorage.setItem("le3ba-loginAt", String(Date.now())); } catch { /* ignore */ }
   try {
     await signInWithEmailAndPassword(auth, teamEmail(who), $("#lgPass").value.trim());
   } catch (err) {
@@ -69,13 +92,13 @@ onAuthStateChanged(auth, async (u) => {
     live = !s.metadata.fromCache;
     const ng = s.exists() ? s.data() : null;
     if (JSON.stringify(ng) === JSON.stringify(settings)) return;
-    settings = ng; applyHost(); render();
+    settings = ng; applyHost(); render(); checkKick();
   }));
   unsubs.push(onSnapshot(tRef(), { includeMetadataChanges: true }, (s) => {
     live = !s.metadata.fromCache;
     const nt = s.data() || null;
     if (JSON.stringify(nt) === JSON.stringify(team)) return;
-    prevTeam = team; team = nt; announce(); render();
+    prevTeam = team; team = nt; announce(); render(); checkKick();
   }));
   unsubs.push(onSnapshot(query(collection(db, "challenges"), orderBy("order")), (s) => {
     challenges = s.docs.map((d) => ({ id: d.id, ...d.data() })); render();

@@ -168,6 +168,7 @@ function cardHtml(t) {
       ${cur ? `<button class="btn btn-sm btn-ghost" data-act="skip" data-id="${t.id}">تخطي التحدي</button>` : ""}
       <button class="btn btn-sm btn-ghost" data-act="score" data-id="${t.id}">✎ ${tr("النقط")}</button>
       <button class="btn btn-sm btn-ghost" data-act="resetTeam" data-id="${t.id}">ريست الفريق</button>
+      <button class="btn btn-sm btn-ghost danger" data-act="kick" data-id="${t.id}" title="${esc(tr("خروج الفريق ده"))}">🚪</button>
     </div></div>`;
 }
 
@@ -189,10 +190,18 @@ $("#btnStartS").onclick = async () => {
   if (on < list.length && !confirm(tr("{on} من {all} فرق بس متصلين. تبدأ برضه؟", { on, all: list.length }))) return;
   const ids = activeChallenges().map((c) => c.id);
   if (list.some((t) => !t.route || ids.some((id) => !t.route.includes(id)))) await generateRoutes(true);
-  await updateDoc(sRef, { status: "running" });
+  await updateDoc(sRef, { status: "running", endedAt: null });
 };
 $("#btnPauseS").onclick = () => updateDoc(sRef, { status: "paused" });
-$("#btnEndS").onclick = async () => { if (confirm(tr("إنهاء اللعبة لكل الفرق؟"))) await updateDoc(sRef, { status: "ended" }); };
+$("#btnEndS").onclick = async () => { if (confirm(tr("إنهاء اللعبة لكل الفرق؟"))) await updateDoc(sRef, { status: "ended", endedAt: Date.now() }); };
+$("#btnKickAll").onclick = async () => {
+  if (!confirm(tr("خروج كل الفرق من كل الموبايلات دلوقتي؟ (النقط والنتايج مش هتتمسح)"))) return;
+  await updateDoc(sRef, { kickAll: Date.now() });
+  const b = writeBatch(db);
+  Object.keys(presence).forEach((id) => b.delete(doc(db, "presence", id)));
+  await b.commit().catch(() => {});
+  toast(tr("كل الموبايلات اتعملها خروج ✓"), "good");
+};
 $("#btnResetS").onclick = async () => {
   if (!confirm(tr("ريست كامل: كل النقط والتقدم هيتمسحوا وترجع للوبي. متأكد؟"))) return;
   if (!confirm(tr("آخر تأكيد — مفيش رجوع."))) return;
@@ -212,6 +221,12 @@ $("#teamGrid").addEventListener("click", async (e) => {
   const b = e.target.closest("button[data-act]"); if (!b) return;
   const t = teams[b.dataset.id]; if (!t) return;
   if (b.dataset.act === "score") { openScore(t.id); return; }
+  if (b.dataset.act === "kick") {
+    if (!confirm(tr("خروج {name} من الموبايل بتاعهم؟ هيقدروا يدخلوا تاني باليوزر والباسورد.", { name: t.name }))) return;
+    await updateDoc(doc(db, "teams", t.id), { kickAt: Date.now() });
+    await deleteDoc(doc(db, "presence", t.id)).catch(() => {});
+    toast(tr("{name} اتعمله خروج ✓", { name: t.name }), "good"); return;
+  }
   if (b.dataset.act === "skip") {
     if (!confirm(tr("تخطي التحدي الحالي لـ {name}؟ (هياخد صفر فيه)", { name: t.name }))) return;
     await Promise.all(subs.filter((s) => s.teamId === t.id).map(removeSubmission));
