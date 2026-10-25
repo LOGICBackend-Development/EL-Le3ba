@@ -9,10 +9,10 @@ import {
   doc, getDoc, getDocs, onSnapshot, updateDoc, setDoc, collection, query, orderBy, serverTimestamp,
   runTransaction, getDocFromServer,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { createAvatar } from "./avatar.js";
+import { createAvatar, unlockAudio } from "./avatar.js";
 
 const $ = (s) => document.querySelector(s);
-const avatar = createAvatar();
+const avatar = createAvatar({ pending: true });
 const RING_C = 2 * Math.PI * 90;
 const MAX_VIDEO_BYTES = 8 * 1024 * 1024;
 const MAX_REC_SEC = 30;
@@ -65,14 +65,25 @@ onAuthStateChanged(auth, async (u) => {
   }
   uid = u.uid;
   $("#topbar").hidden = false;
-  unsubs.push(onSnapshot(doc(db, "settings", "game"), (s) => { settings = s.exists() ? s.data() : null; applyHost(); render(); }));
-  unsubs.push(onSnapshot(tRef(), (s) => { prevTeam = team; team = s.data() || null; announce(); render(); }));
+  unsubs.push(onSnapshot(doc(db, "settings", "game"), { includeMetadataChanges: true }, (s) => {
+    live = !s.metadata.fromCache;
+    const ng = s.exists() ? s.data() : null;
+    if (JSON.stringify(ng) === JSON.stringify(settings)) return;
+    settings = ng; applyHost(); render();
+  }));
+  unsubs.push(onSnapshot(tRef(), { includeMetadataChanges: true }, (s) => {
+    live = !s.metadata.fromCache;
+    const nt = s.data() || null;
+    if (JSON.stringify(nt) === JSON.stringify(team)) return;
+    prevTeam = team; team = nt; announce(); render();
+  }));
   unsubs.push(onSnapshot(query(collection(db, "challenges"), orderBy("order")), (s) => {
     challenges = s.docs.map((d) => ({ id: d.id, ...d.data() })); render();
+    if (introPending && curKey && curKey.startsWith("intro")) setupIntro();
     setTimeout(preloadMedia, 1200);
   }));
   heartbeat();
-  hbTimer = setInterval(heartbeat, 60000);
+  hbTimer = setInterval(heartbeat, 120000);
 });
 
 function teardown() {
@@ -97,10 +108,11 @@ async function applyHost() {
         getMediaBlobUrl(`media/loop_${k}`, L[`${k}Chunks`], L[`${k}Mime`] || "video/mp4", L[`${k}Ver`])));
       avatar.setLoops({ idle, talk, fx: L.fx, fy: L.fy });
     } else {
+      const ph = h?.chunks ? await loadHostPhoto(h) : null;   // stays on the loading frame until ready
       avatar.setLoops(null);
-      avatar.setPhoto(h?.chunks ? await loadHostPhoto(h) : null);
+      avatar.setPhoto(ph);
     }
-  } catch (e) { console.error(e); hostKey = null; }
+  } catch (e) { console.error(e); hostKey = null; avatar.setPhoto(null); }   // fall back to the drawn host
 }
 
 function heartbeat() {
@@ -172,6 +184,7 @@ let waitTimer = null;
 function leave() {
   clearInterval(tickTimer); tickTimer = null;
   clearInterval(waitTimer); waitTimer = null;
+  stopAuto();
   if (occUnsub) { occUnsub(); occUnsub = null; }
   closeTheater();
   avatar.stop();
@@ -181,16 +194,16 @@ function mountAvatar(sel) { avatar.setMode("card"); $(sel).appendChild(avatar.el
 
 function enter(name) {
   switch (name) {
-    case "lobby": mountAvatar("#avLobby"); break;
+    case "lobby": mountAvatar("#avLobby"); setTimeout(autoWelcome, 600); break;
     case "wait":
       $("#waitMsg").textContent = "بنجهزلكم التحدي الجاي";
       occUnsub = onSnapshot(doc(db, "state", "occupancy"), () => setTimeout(tryAllocate, Math.random() * 400));
-      waitTimer = setInterval(tryAllocate, 3000);   // don't rely only on live updates (mobile data)
+      waitTimer = setInterval(tryAllocate, 6000);   // don't rely only on live updates (mobile data)
       break;
     case "intro":
       setupIntro();
       occUnsub = onSnapshot(doc(db, "state", "occupancy"), (snap) => { occNow = snap.data() || {}; showInside(); setTimeout(tryClaim, Math.random() * 300); });
-      waitTimer = setInterval(tryClaim, 3000);
+      waitTimer = setInterval(claimCheck, 5000);
       break;
     case "playing": setupPlaying(); break;
     case "retry":
@@ -292,13 +305,17 @@ async function preloadMedia() {
   preloading = false;
 }
 
+let introMedia = null;
+let introPending = false;
 async function setupIntro() {
   const key = curKey, cur = team.current, ch = chal(cur.cid);
   setTitles();
+  if (!ch) { introPending = true; return; }            // challenge list not loaded yet — try again when it arrives
+  introPending = false;
   mountAvatar("#avIntro");
-  heard = false;
+  heard = false; introMedia = null; stopAuto();
   const btnPlay = $("#btnPlayVN");
-  btnPlay.hidden = false; btnPlay.disabled = true; btnPlay.textContent = "⏳ بنحمّل الرسالة…";
+  btnPlay.hidden = false; btnPlay.disabled = true; btnPlay.textContent = tr("⏳ بنحمّل الرسالة…");
   updateStartBtn();
   let media = null;
   try {
@@ -308,44 +325,127 @@ async function setupIntro() {
   } catch (e) { console.error(e); }
   if (key !== curKey) return;
   if (!media) { btnPlay.hidden = true; heard = true; updateStartBtn(); return; }
-  btnPlay.disabled = false; btnPlay.textContent = "▶ اسمعوا الرسالة";
-  btnPlay.onclick = () => openTheater(media, ch?.name || "", () => {
-    heard = true; updateStartBtn(); btnPlay.textContent = "↻ اسمعوها تاني";
+  introMedia = media;
+  btnPlay.disabled = false; btnPlay.textContent = tr("▶ اسمعوا الرسالة");
+  btnPlay.onclick = () => playChallengeMessage();
+  playChallengeMessage();                               // plays by itself
+}
+function playChallengeMessage() {
+  if (!introMedia) return;
+  stopAuto();
+  const ch = chal(team?.current?.cid);
+  openTheater(introMedia, ch?.name || "", () => {
+    heard = true;
+    $("#btnPlayVN").textContent = tr("↻ اسمعوها تاني");
+    showEndCard("challenge");
+    updateStartBtn();
   });
 }
 
 /* ---- full-screen theater ---- */
-let theaterDone = null;
+let theaterDone = null, theaterMedia = null, endKind = null;
 function openTheater(media, title, onDone) {
   const th = $("#theater"), vid = $("#thVideo");
-  theaterDone = onDone;
+  theaterDone = onDone; theaterMedia = media;
   $("#thName").textContent = title;
+  $("#thEnd").hidden = true; $("#thTap").hidden = true;
   th.hidden = false;
   th.classList.toggle("is-video", media.kind === "video");
-  try { const r = document.documentElement.requestFullscreen?.(); r && r.catch(() => {}); } catch { /* not supported */ }
-  const finish = () => { const cb = theaterDone; closeTheater(); cb && cb(); };
+  const finished = (err) => {
+    if (err === "error") { toast(tr("الرسالة مش راضية تشتغل على الموبايل ده — اطلبوا من المنظّم"), "bad"); }
+    const cb = theaterDone; cb && cb();
+  };
+  const blocked = () => { $("#thTap").hidden = false; };
   if (media.kind === "video") {
-    vid.hidden = false; vid.src = media.url; vid.currentTime = 0;
-    vid.onended = finish;
-    vid.play().catch((e) => { console.warn(e); vid.controls = true; });
+    vid.hidden = false; vid.muted = false; vid.src = media.url; vid.currentTime = 0;
+    vid.onended = () => finished();
+    vid.onerror = () => finished("error");
+    vid.play().catch((e) => { console.warn(e); if (e.name === "NotAllowedError") blocked(); else finished("error"); });
   } else {
     vid.hidden = true;
     avatar.setMode("full");
     $("#thStage").appendChild(avatar.el);
-    avatar.speak(media.url, finish);
+    avatar.speak(media.url, finished, blocked);
   }
 }
+$("#thTapBtn").onclick = () => {
+  unlockAudio();
+  $("#thTap").hidden = true;
+  if (theaterMedia) openTheater(theaterMedia, $("#thName").textContent, theaterDone);
+};
 function closeTheater() {
   const th = $("#theater"), vid = $("#thVideo");
   if (th.hidden) return;
-  theaterDone = null;
-  vid.onended = null; vid.pause(); vid.removeAttribute("src"); vid.load(); vid.controls = false;
+  theaterDone = null; theaterMedia = null; endKind = null;
+  vid.onended = null; vid.onerror = null; vid.pause(); vid.removeAttribute("src"); vid.load(); vid.controls = false;
   avatar.stop();
-  th.hidden = true;
-  try { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); } catch { /* ignore */ }
+  th.hidden = true; $("#thEnd").hidden = true; $("#thTap").hidden = true;
   if (curKey && curKey.startsWith("intro")) mountAvatar("#avIntro");
   else if (curKey === "lobby") mountAvatar("#avLobby");
 }
+
+// What to show when the message ends
+function showEndCard(kind) {
+  endKind = kind;
+  $("#thEnd").hidden = false;
+  if (kind === "welcome") {
+    $("#thEndRing").hidden = true;
+    $("#thEndTitle").textContent = tr("جاهزين؟");
+    $("#thEndMsg").textContent = tr("اللعبة هتبدأ أول ما المنظّم يدي الإشارة.");
+    $("#thGo").textContent = tr("⏸ استنوا في اللوبي");
+  } else {
+    $("#thGo").textContent = tr("يلا نبدأ دلوقتي ⏱");
+    renderAuto();
+  }
+}
+$("#thGo").onclick = () => {
+  if (endKind === "welcome") { closeTheater(); return; }
+  if ($("#thGo").disabled) return;
+  stopAuto(); closeTheater(); startTimer("intro", true);
+};
+$("#thAgain").onclick = () => {
+  stopAuto();
+  if (endKind === "welcome") playWelcome();
+  else playChallengeMessage();
+};
+
+/* ---- 10-second auto start after the message ---- */
+let autoT = null, autoLeft = 10;
+const AUTO_SECS = 10;
+function canAutoStart() {
+  const cur = team?.current;
+  return cur && cur.phase === "intro" && heard && !cur.queued && settings?.status === "running";
+}
+function startAuto() {
+  if (autoT || !canAutoStart()) { renderAuto(); return; }
+  autoLeft = AUTO_SECS; renderAuto();
+  autoT = setInterval(() => {
+    if (!canAutoStart()) { renderAuto(); return; }      // paused / queued: hold
+    autoLeft--;
+    if (autoLeft <= 3 && autoLeft > 0) beep(660, 0.1, 0.15);
+    renderAuto();
+    if (autoLeft <= 0) { stopAuto(); closeTheater(); beep(990, 0.25, 0.18); startTimer("intro", true); }
+  }, 1000);
+}
+function stopAuto() { clearInterval(autoT); autoT = null; renderAuto(); }
+function renderAuto() {
+  const cur = team?.current, running = !!autoT;
+  const queued = !!cur?.queued, paused = settings?.status !== "running";
+  // challenge end-card
+  if (endKind === "challenge") {
+    $("#thEndRing").hidden = !running;
+    $("#thEndCount").textContent = autoLeft;
+    $("#thEndArc").style.strokeDashoffset = String(327 * (1 - autoLeft / AUTO_SECS));
+    $("#thEndTitle").textContent = queued ? tr("🚶 روحوا على المحطة") : running ? tr("التحدي هيبدأ لوحده") : tr("جاهزين؟");
+    $("#thEndMsg").textContent = queued ? tr("الوقت هيتفتح أول ما المحطة تفضى") : paused ? tr("اللعبة واقفة") : running ? tr("بعد {n} ثانية… أو ابدأوا دلوقتي", { n: autoLeft }) : "";
+    $("#thGo").disabled = queued || paused;
+  }
+  // banner on the intro screen
+  const show = cur?.phase === "intro" && heard && (running || queued);
+  $("#introAuto").hidden = !show;
+  if (show) $("#introAutoText").textContent = queued ? tr("الوقت هيتفتح أول ما المحطة تفضى") : tr("التحدي هيبدأ بعد {n} ثانية", { n: autoLeft });
+}
+
 $("#thClose").onclick = () => closeTheater();
 
 function updateStartBtn() {
@@ -355,6 +455,7 @@ function updateStartBtn() {
   $("#introTag").textContent = queued ? tr("🚶 روحوا على المحطة") : tr("التحدي الجاي");
   $("#introTag").classList.toggle("warn", queued);
   $("#stationBusy").hidden = !queued;
+  if (heard && !queued && settings?.status === "running" && team?.current?.phase === "intro") startAuto(); else renderAuto();
   $("#introHint").textContent = queued ? tr("الوقت هيتفتح أول ما المحطة تفضى")
     : !heard ? tr("لازم تسمعوا الرسالة الأول") : settings?.status !== "running" ? tr("اللعبة واقفة") : tr("الوقت هيبدأ أول ما تدوسوا");
 }
@@ -362,9 +463,27 @@ function updateStartBtn() {
 /* ---- waiting at a busy station ---- */
 const nameCache = {};
 let claiming = false, occNow = null;
+let claimTick = 0;
+async function claimCheck() {          // every 5 s while queued: no reads unless needed
+  const cur = team?.current;
+  if (!cur?.queued) return;
+  claimTick++;
+  if (!live || claimTick % 4 === 0) {   // every 20 s (or when offline-ish) refresh the station state: 1 read
+    try { occNow = (await getDocFromServer(doc(db, "state", "occupancy"))).data() || {}; showInside(); } catch { /* ignore */ }
+  }
+  tryClaim();
+}
+function setLooksFree() {
+  const cur = team?.current; if (!cur || !occNow) return true;
+  const cap = Math.max(1, Number(settings?.sets) || 1);
+  const playing = ((occNow.slots || {})[cur.cid] || []).filter((x) => x !== uid).length;
+  const pos = ((occNow.queue || {})[cur.cid] || []).indexOf(uid);
+  return playing < cap && (pos < 0 || pos < cap - playing);
+}
 async function tryClaim() {
   const cur = team?.current;
   if (!cur?.queued || claiming || settings?.status !== "running") return;
+  if (!setLooksFree()) return;                     // station still busy → don't spend reads
   claiming = true;
   try { const r = await claimSlot(uid, settings); if (r === "ok") resync(); } catch (e) { console.warn(e); }
   finally { claiming = false; }
@@ -386,12 +505,13 @@ async function showInside() {
 $("#btnStart").onclick = () => startTimer("intro");
 $("#btnRetry").onclick = () => startTimer("retry");
 
-async function startTimer(fromPhase) {
+async function startTimer(fromPhase, skipCountdown = false) {
   const cur = team?.current;
   if (!cur || cur.phase !== fromPhase || settings.status !== "running" || cur.queued) return;
   $("#btnStart").disabled = true; $("#btnRetry").disabled = true;
+  stopAuto();
   avatar.stop();
-  await countdown();
+  if (!skipCountdown) await countdown();
   if (team?.current?.phase !== fromPhase || settings.status !== "running") { refresh(fromPhase); return; }
   try {
     await updateDoc(tRef(), {
@@ -644,27 +764,33 @@ function confetti() {
    Live updates can stall on some mobile networks. While a team is waiting
    (for the judge or for a free challenge) re-check the server every 5 s,
    and always re-check when the phone comes back to the app. */
-async function resync() {
+let live = true;
+async function resync(withSettings = false) {
   if (!uid) return;
   try {
-    const [t, g] = await Promise.all([getDocFromServer(tRef()), getDocFromServer(doc(db, "settings", "game"))]);
-    const nt = t.data() || null, ng = g.exists() ? g.data() : null;
+    const reads = [getDocFromServer(tRef())];
+    if (withSettings) reads.push(getDocFromServer(doc(db, "settings", "game")));
+    const [t, g] = await Promise.all(reads);
+    const nt = t.data() || null;
     let changed = false;
     if (JSON.stringify(nt) !== JSON.stringify(team)) { prevTeam = team; team = nt; announce(); changed = true; }
-    if (JSON.stringify(ng) !== JSON.stringify(settings)) { settings = ng; changed = true; }
+    if (g) { const ng = g.exists() ? g.data() : null; if (JSON.stringify(ng) !== JSON.stringify(settings)) { settings = ng; changed = true; } }
     if (changed) render();
   } catch (e) { /* offline — try again later */ }
 }
+// Backup check (free-plan friendly): live updates normally do the job. While waiting for the judge or a station,
+// read the team's own doc every 20 s — or every 8 s if the live connection dropped.
 let syncTick = 0;
 setInterval(() => {
   syncTick++;
   if (document.hidden || !team) return;
-  if (settings?.status === "lobby" && syncTick % 2) return;   // lobby: every 10 s is enough
-  const ph = team.current?.phase;
-  if (ph === "pending" || team.current?.queued || (!team.current && settings?.status === "running" && !team.finished) || settings?.status === "lobby") resync();
-}, 5000);
-document.addEventListener("visibilitychange", () => { if (!document.hidden) resync(); });
-window.addEventListener("online", resync);
+  const waiting = team.current?.phase === "pending" || team.current?.queued;
+  const every = live ? 10 : 4;                      // ticks of 2 s → 20 s / 8 s
+  if (waiting && syncTick % every === 0) resync(!live);
+  else if (!live && syncTick % 5 === 0) resync(true); // connection trouble: also catch start/pause
+}, 2000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) resync(true); });
+window.addEventListener("online", () => resync(true));
 
 /* ================= WELCOME MESSAGE in the lobby ================= */
 let lastPing = null;
@@ -687,12 +813,19 @@ async function playWelcome() {
   $("#callFx").hidden = true;
   const w = settings?.welcome || {};
   if (!w.audioChunks) return;
-  const btn = $("#btnWelcome"); btn.disabled = true;
   try {
     const url = await getMediaBlobUrl("media/welcome", w.audioChunks, w.audioMime || "audio/mpeg", w.audioVer);
-    openTheater({ kind: "audio", url }, settings.eventTitle || "El Le3ba", () => {});
+    if (curKey !== "lobby") return;
+    openTheater({ kind: "audio", url }, settings.eventTitle || "El Le3ba", () => showEndCard("welcome"));
+    try { sessionStorage.setItem(`le3ba-welcome-${w.audioVer}`, "1"); } catch { /* ignore */ }
   } catch (e) { console.error(e); }
-  btn.disabled = false;
+}
+// play the welcome by itself the first time a team reaches the lobby
+function autoWelcome() {
+  const w = settings?.welcome || {};
+  if (!w.audioChunks || settings?.status !== "lobby" || !$("#theater").hidden) return;
+  let seen = false; try { seen = sessionStorage.getItem(`le3ba-welcome-${w.audioVer}`) === "1"; } catch { /* ignore */ }
+  if (!seen) playWelcome();
 }
 $("#btnWelcome").onclick = playWelcome;
 $("#btnCallListen").onclick = playWelcome;

@@ -3,7 +3,7 @@ import {
   auth, db, firebaseConfig, ADMIN_EMAIL, teamEmail, fmt, elapsedOf, finishChallenge, cleanSlots,
   blobToB64, b64ToBlob, writeChunks, readChunks, deleteChunks, esc, toast, beep, pointsFor,
   DEFAULT_SETTINGS, DEFAULT_CHALLENGES, TEAM_COLORS, compressImage, loadHostPhoto, DEFAULT_MOUTH, makeRoutes, getMediaBlobUrl,
-  authErrorText, readOcc,
+  authErrorText, readOcc, toUniversalAudio,
 } from "./common.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
@@ -25,12 +25,12 @@ let occQ = {};
 let settings = null, teams = {}, presence = {}, challenges = [], creds = {}, subs = [], occ = {};
 let unsubs = [], timerInt = null, firstSubs = true, settingsDirty = false;
 const seenSubs = new Set(), mediaUrls = new Map(), loadingMedia = new Set(), busy = new Set();
-const avatar = createAvatar();
+const avatar = createAvatar({ pending: true });
 
 const chal = (id) => challenges.find((c) => c.id === id);
 const activeChallenges = () => challenges.filter((c) => c.active !== false);
 const teamList = () => Object.values(teams).sort((a, b) => String(a.username).localeCompare(String(b.username)));
-const isOnline = (id) => presence[id] && Date.now() - presence[id] < 100000;
+const isOnline = (id) => presence[id] && Date.now() - presence[id] < 270000;
 
 /* ================= AUTH ================= */
 $("#admForm").addEventListener("submit", async (e) => {
@@ -479,15 +479,28 @@ async function toggleRecord(cid) {
 }
 
 async function uploadAudio(cid, blob, mime) {
-  if (blob.size > 4 * 1024 * 1024) { toast("الملف أكبر من 4MB — صغّره أو قصّره", "bad"); return; }
   const c = chal(cid), old = c?.audioChunks || 0;
   toast("بنرفع الـ VN…");
   try {
-    const n = await writeChunks(`media/${cid}`, await blobToB64(blob));
-    await updateDoc(doc(db, "challenges", cid), { audioChunks: n, audioMime: mime, audioVer: Date.now() });
+    const conv = await convertForPhones(blob, mime); if (!conv) return;
+    const n = await writeChunks(`media/${cid}`, await blobToB64(conv.blob));
+    await updateDoc(doc(db, "challenges", cid), { audioChunks: n, audioMime: conv.mime, audioVer: Date.now() });
     if (old > n) await deleteChunks(`media/${cid}`, old, n);
     toast("الـ VN اتحفظ ✓", "good");
   } catch (e) { console.error(e); toast("الرفع فشل", "bad"); }
+}
+
+// Every voice note is saved as WAV so it plays on all phones (Chrome recordings are WebM, which iPhones can't play).
+async function convertForPhones(blob, mime) {
+  try {
+    const { blob: wav, seconds } = await toUniversalAudio(blob);
+    if (wav.size > 4.5 * 1024 * 1024) { toast(tr("الـ VN طويل أوي ({s} ثانية) — خلّيه أقل من دقيقتين", { s: Math.round(seconds) }), "bad"); return null; }
+    return { blob: wav, mime: "audio/wav" };
+  } catch (e) {
+    console.warn("convert failed, keeping original", e);
+    if (blob.size > 4 * 1024 * 1024) { toast("الملف أكبر من 4MB — صغّره أو قصّره", "bad"); return null; }
+    return { blob, mime: mime || blob.type || "audio/mpeg" };
+  }
 }
 
 async function uploadVideo(cid, blob, mime) {
@@ -795,13 +808,13 @@ function fillWelcome() {
   $("#wRec").textContent = wRecState ? tr("⏹ وقّف وسجّل") : tr("🎙 سجّل VN");
 }
 async function saveWelcomeAudio(blob, mime) {
-  if (blob.size > 4 * 1024 * 1024) { toast("الملف أكبر من 4MB — صغّره أو قصّره", "bad"); return; }
   toast("بنرفع الـ VN…");
   try {
+    const conv = await convertForPhones(blob, mime); if (!conv) return;
     const old = settings.welcome?.audioChunks || 0;
-    const n = await writeChunks("media/welcome", await blobToB64(blob));
+    const n = await writeChunks("media/welcome", await blobToB64(conv.blob));
     if (old > n) await deleteChunks("media/welcome", old, n);
-    await updateDoc(sRef, { "welcome.audioChunks": n, "welcome.audioMime": mime, "welcome.audioVer": Date.now() });
+    await updateDoc(sRef, { "welcome.audioChunks": n, "welcome.audioMime": conv.mime, "welcome.audioVer": Date.now() });
     toast("الـ VN اتحفظ ✓", "good");
   } catch (e) { console.error(e); toast("الرفع فشل", "bad"); }
 }
@@ -1042,3 +1055,26 @@ function checkOccupancy() {
     } catch (e) { console.warn("occupancy repair", e); }
   }, 4000);
 }
+
+/* ================= FIX OLD VOICE NOTES ================= */
+$("#btnFixAudio").onclick = async () => {
+  const b = $("#btnFixAudio"); b.disabled = true;
+  const jobs = challenges.filter((c) => c.audioChunks && c.audioMime !== "audio/wav")
+    .map((c) => ({ path: `media/${c.id}`, n: c.audioChunks, mime: c.audioMime, save: (n, ver) => updateDoc(doc(db, "challenges", c.id), { audioChunks: n, audioMime: "audio/wav", audioVer: ver }) }));
+  const w = settings.welcome;
+  if (w?.audioChunks && w.audioMime !== "audio/wav") jobs.push({ path: "media/welcome", n: w.audioChunks, mime: w.audioMime, save: (n, ver) => updateDoc(sRef, { "welcome.audioChunks": n, "welcome.audioMime": "audio/wav", "welcome.audioVer": ver }) });
+  if (!jobs.length) { toast(tr("كل الـ VNs شغّالة على كل الموبايلات ✓"), "good"); b.disabled = false; return; }
+  let ok = 0;
+  for (const j of jobs) {
+    b.textContent = tr("بيصلّح… {a}/{b}", { a: ok + 1, b: jobs.length });
+    try {
+      const src = b64ToBlob(await readChunks(j.path, j.n), j.mime || "audio/webm");
+      const { blob } = await toUniversalAudio(src);
+      const n = await writeChunks(j.path, await blobToB64(blob));
+      if (j.n > n) await deleteChunks(j.path, j.n, n);
+      await j.save(n, Date.now()); ok++;
+    } catch (e) { console.error(e); toast(tr("مقدرناش نصلّح واحد — سجّله تاني"), "bad"); }
+  }
+  b.disabled = false; b.textContent = tr("🔧 خلّي كل الـ VNs تشتغل على كل الموبايلات");
+  toast(tr("اتصلّح {n} VN ✓", { n: ok }), "good");
+};

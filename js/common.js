@@ -336,3 +336,28 @@ export function makeRoutes(teamIds, challengeIds, sets) {
   T.forEach((id, k) => { out[id] = Array.from({ length: n }, (_, r) => C[(k + r) % n]); });
   return { routes: out, strict: T.length <= n * Math.max(1, sets) };
 }
+
+/* ---------- convert any voice note to WAV (plays on every iPhone/Android) ---------- */
+export async function toUniversalAudio(blob, rate = 16000) {
+  const buf = await blob.arrayBuffer();
+  const AC = window.AudioContext || window.webkitAudioContext;
+  const ac = new AC();
+  let src;
+  try { src = await new Promise((res, rej) => { const p = ac.decodeAudioData(buf, res, rej); if (p && p.then) p.then(res, rej); }); }
+  finally { ac.close?.(); }
+  const len = Math.ceil(src.duration * rate);
+  const off = new OfflineAudioContext(1, len, rate);
+  const node = off.createBufferSource(); node.buffer = src; node.connect(off.destination); node.start();
+  const out = (await off.startRendering()).getChannelData(0);
+  // normalise loudness a bit so quiet recordings are audible
+  let peak = 0; for (let i = 0; i < out.length; i++) peak = Math.max(peak, Math.abs(out[i]));
+  const gain = peak > 0 ? Math.min(4, 0.95 / peak) : 1;
+  const view = new DataView(new ArrayBuffer(44 + out.length * 2));
+  const w = (o, str) => { for (let i = 0; i < str.length; i++) view.setUint8(o + i, str.charCodeAt(i)); };
+  w(0, "RIFF"); view.setUint32(4, 36 + out.length * 2, true); w(8, "WAVE"); w(12, "fmt ");
+  view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+  view.setUint32(24, rate, true); view.setUint32(28, rate * 2, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+  w(36, "data"); view.setUint32(40, out.length * 2, true);
+  for (let i = 0; i < out.length; i++) view.setInt16(44 + i * 2, Math.max(-1, Math.min(1, out[i] * gain)) * 0x7fff, true);
+  return { blob: new Blob([view], { type: "audio/wav" }), seconds: src.duration };
+}

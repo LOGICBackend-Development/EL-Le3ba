@@ -251,13 +251,51 @@ function photoView(p, mode) {
   return `${x.toFixed(1)} ${y.toFixed(1)} ${s.toFixed(1)} ${s.toFixed(1)}`;
 }
 
-export function createAvatar() {
+/* ---------- shared audio player (unlocked once by a tap, then plays automatically) ---------- */
+const player = new Audio();
+player.playsInline = true; player.preload = "auto";
+player.setAttribute("playsinline", "");
+const SILENCE = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
+let unlocked = false;
+export function unlockAudio() {           // call inside a tap/click
+  if (unlocked) return;
+  try { player.src = SILENCE; const r = player.play(); if (r && r.then) r.then(() => { unlocked = true; }).catch(() => {}); } catch { /* ignore */ }
+}
+export const isAudioUnlocked = () => unlocked;
+["pointerdown", "touchend", "keydown"].forEach((ev) => document.addEventListener(ev, unlockAudio, { capture: true, passive: true }));
+
+// Loudness of the voice note every 20 ms (0..1), computed once per file — no audio output involved.
+const maps = new Map();
+export function volumeMap(url) {
+  if (maps.has(url)) return maps.get(url);
+  const job = (async () => {
+    const buf = await (await fetch(url)).arrayBuffer();
+    const AC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    const ctx = new AC(1, 22050, 22050);
+    const ab = await new Promise((res, rej) => { const pr = ctx.decodeAudioData(buf, res, rej); if (pr && pr.then) pr.then(res, rej); });
+    const ch = ab.getChannelData(0), step = Math.max(1, Math.floor(ab.sampleRate / 50)), out = [];
+    let peak = 0.0001;
+    for (let i = 0; i < ch.length; i += step) {
+      let sum = 0; const end = Math.min(ch.length, i + step);
+      for (let j = i; j < end; j++) sum += ch[j] * ch[j];
+      const v = Math.sqrt(sum / (end - i)); out.push(v); if (v > peak) peak = v;
+    }
+    return out.map((v) => Math.min(1, (v / peak) * 1.15));
+  })();
+  maps.set(url, job);
+  job.catch(() => maps.delete(url));
+  return job;
+}
+
+export function createAvatar({ pending = false } = {}) {
   const el = document.createElement("div");
   el.className = "avatar";
-  let mode = "card", photo = null, loops = null, r = {};
-  let ctx = null, audio = null, raf = 0, amp = 0, t0 = 0;
+  let mode = "card", photo = null, loops = null, r = {}, isPending = pending;
+  let audio = null, raf = 0, amp = 0, t0 = 0;
 
   function build() {
+    el.classList.toggle("is-pending", isPending);
+    if (isPending) { el.innerHTML = ""; r = {}; el.dataset.mode = mode; return; }
     el.classList.toggle("is-loops", !!loops);
     if (loops) {
       // Real motion: two looping clips (listening / talking) cross-faded by the voice volume.
@@ -284,6 +322,7 @@ export function createAvatar() {
   }
   function applyMode() {
     el.dataset.mode = mode;
+    if (isPending) return;
     if (loops) {
       const z = mode === "full" ? 1 : (loops.zoom || 2.2);
       r.wrap.style.transformOrigin = `${(loops.fx ?? 0.5) * 100}% ${(loops.fy ?? 0.22) * 100}%`;
@@ -295,6 +334,7 @@ export function createAvatar() {
 
   let talkOn = false, quietSince = 0;
   function setAmp(a, t = 0) {
+    if (isPending) return;
     if (loops) {
       const now = performance.now();
       if (a > 0.12) {
@@ -363,7 +403,7 @@ export function createAvatar() {
     return { gR: gR + idle, gL: gL - idle * 0.6, wave, fing };
   }
   function applyLife(now, a) {
-    if (loops) return;                 // real video already moves
+    if (loops || isPending) return;    // real video already moves
     const L = lifeStep(now, a);
     if (photo) {                   // still picture: camera push-in + lean on strong moments
       const k = 1 + (now ? Math.sin(now / 2600) * 0.006 : 0) + life.punch * 0.035;
@@ -384,51 +424,47 @@ export function createAvatar() {
 
   function setMode(m) { mode = m; applyMode(); }
   // p = { url, W, H, mx, my, mw } in image pixels, or null for the drawn host
-  function setPhoto(p) { stop(); photo = p; build(); }
+  function setPhoto(p) { stop(); isPending = false; photo = p; build(); }
   // l = { idle: url, talk: url, fx, fy, zoom } or null
-  function setLoops(l) { stop(); loops = l && l.idle && l.talk ? l : null; build(); }
+  function setLoops(l) { stop(); isPending = false; loops = l && l.idle && l.talk ? l : null; build(); }
 
   function stop() {
     cancelAnimationFrame(raf);
-    if (audio) { audio.onended = null; audio.pause(); audio.removeAttribute("src"); audio = null; }
+    if (audio) { audio.onended = null; audio.onerror = null; audio.pause(); audio = null; }
     el.classList.remove("talking");
     amp = 0; setAmp(0);
   }
 
-  function speak(url, done) {
+  // Plain <audio> playback (iPhone silent switch does NOT mute it) + lip-sync from a pre-scanned volume map.
+  function speak(url, done, onBlocked) {
     stop();
-    try {
-      ctx = ctx || new (window.AudioContext || window.webkitAudioContext)();
-      ctx.resume();
-    } catch (e) { ctx = null; }
-    audio = new Audio();
-    audio.src = url;
-    audio.playsInline = true;
-    let an = null, buf = null;
-    if (ctx) {
-      const src = ctx.createMediaElementSource(audio);
-      an = ctx.createAnalyser(); an.fftSize = 1024;
-      src.connect(an); an.connect(ctx.destination);
-      buf = new Uint8Array(an.fftSize);
-    }
+    const p = player;
+    const env = { data: null };
+    volumeMap(url).then((d) => { env.data = d; }).catch(() => {});
+    p.onended = null; p.onerror = null;
+    p.src = url;
+    p.currentTime = 0;
+    audio = p;
     el.classList.add("talking");
     t0 = performance.now();
     const loop = (now) => {
-      let target = 0;
-      if (an) {
-        an.getByteTimeDomainData(buf);
-        let sum = 0;
-        for (let i = 0; i < buf.length; i++) { const v = (buf[i] - 128) / 128; sum += v * v; }
-        target = Math.min(1, Math.sqrt(sum / buf.length) * 5);
-      } else target = Math.random() * 0.6;
+      let target;
+      if (env.data) { const i = Math.floor(p.currentTime * 50); target = env.data[i] ?? 0; }
+      else target = p.paused ? 0 : 0.25 + Math.abs(Math.sin(now / 90)) * 0.45;
       amp = target > amp ? amp * 0.4 + target * 0.6 : amp * 0.75 + target * 0.25;
       setAmp(amp, (now || performance.now()) - t0 + 1);
       applyLife(now || performance.now(), amp);
       raf = requestAnimationFrame(loop);
     };
-    const a = audio;
-    a.onended = () => { stop(); done && done(); };
-    a.play().then(() => loop(performance.now())).catch((err) => { console.warn(err); stop(); done && done(); });
+    const finish = () => { stop(); done && done(); };
+    p.onended = finish;
+    p.onerror = () => { console.warn("audio error", p.error); stop(); done && done("error"); };
+    const pr = p.play();
+    if (pr && pr.then) pr.then(() => loop(performance.now())).catch((err) => {
+      console.warn(err); stop();
+      if (err && err.name === "NotAllowedError" && onBlocked) onBlocked(); else done && done("error");
+    });
+    else loop(performance.now());
   }
 
   build();

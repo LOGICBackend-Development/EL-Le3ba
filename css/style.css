@@ -399,3 +399,89 @@ html:not(.i18n-ready) body{visibility:hidden}
 .station-busy b{display:block;font-size:15px;line-height:1.5}
 .station-busy small{display:block;color:#ffd79a;margin-top:2px}
 .station small.q{color:#ffd79a}
+
+/* theater: tap to play + end card */
+.th-tap{position:absolute;inset:0;display:grid;place-items:center;background:rgba(5,6,42,.55);padding:20px}
+.th-tap .btn{max-width:360px;animation:pulse 1.8s infinite}
+.th-end{position:absolute;inset:0;display:grid;place-items:center;padding:20px;background:linear-gradient(0deg,rgba(5,6,42,.92),rgba(5,6,42,.55));animation:fadein .3s ease}
+.th-end-box{width:min(380px,100%);text-align:center;display:flex;flex-direction:column;align-items:center;gap:8px}
+.th-end-box .stack{width:100%}
+.end-ring{position:relative;width:130px;height:130px}
+.end-ring svg{width:100%;height:100%;transform:rotate(-90deg)}
+.end-ring .er-bg{fill:none;stroke:rgba(255,255,255,.12);stroke-width:10}
+.end-ring .er-fg{fill:none;stroke:url(#ringGrad);stroke:#f0609a;stroke-width:10;stroke-linecap:round;stroke-dasharray:327;transition:stroke-dashoffset 1s linear}
+.end-ring span{position:absolute;inset:0;display:grid;place-items:center;font-family:'Baloo Bhaijaan 2';font-weight:800;font-size:56px}
+.auto-start{margin:4px 0 8px;padding:10px 14px;border-radius:16px;text-align:center;font-weight:800;background:linear-gradient(120deg,rgba(143,79,224,.35),rgba(240,96,154,.35));border:1px solid rgba(255,255,255,.18)}
+
+/* =================== AUTO-FIT TO ANY SCREEN =================== */
+/* team app: phones → tablets → laptops */
+@media (min-width:700px){
+  .wrap,.topbar{max-width:640px}
+  .ch-title{font-size:42px}
+  .timer-wrap{width:min(300px,60vw)}
+  .timer{font-size:72px}
+}
+@media (min-width:1100px){ .wrap,.topbar{max-width:720px} }
+@media (max-width:360px){
+  .wrap{padding-inline:10px}
+  .ch-title{font-size:28px}
+  .timer{font-size:52px}
+  .ev-btns{gap:6px}.tile{padding:10px 6px}.tile b{font-size:13px}.tile small{display:none}
+  .stat-tile b{font-size:19px}
+}
+/* phone held sideways: keep things compact */
+@media (orientation:landscape) and (max-height:500px){
+  .topbar{position:static}
+  .stage{max-width:260px}
+  .timer-wrap{width:min(200px,40vh)}
+  .timer{font-size:48px}
+  .brand{margin:2vh 0 10px}.emblem{width:min(160px,30vh)}
+}
+/* full-screen host always fills the screen, any shape */
+.theater .avatar,.theater .avatar svg{width:100%;height:100%}
+.theater .th-stage{display:flex}
+
+/* admin: tabs get their own scrollable row on smaller screens */
+@media (max-width:1100px){
+  .adm-head{display:grid;grid-template-columns:auto 1fr auto;gap:8px}
+  .adm-head .tabs{grid-column:1/-1;grid-row:2;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:2px}
+  .adm-tools{justify-self:end}
+}
+@media (max-width:520px){
+  .adm-main{padding:10px}
+  .ctrl-bar{flex-direction:column;align-items:stretch}
+  .ctrl-btns{display:grid;grid-template-columns:1fr 1fr}
+  .ctrl-info{justify-content:space-between}
+  .stations{grid-template-columns:1fr 1fr}
+  .tgrid{grid-template-columns:1fr}
+  .sublist{grid-template-columns:1fr}
+  .adm-tools .icon-btn{width:36px;height:36px}
+}
+
+/* big screen: scale with the TV / projector */
+.board-rank{max-width:min(1500px,94vw)}
+@media (min-width:1400px){
+  .board-head{padding-top:3vh}
+  .board-rank .podium{gap:3vw;margin-top:6vh}
+  .board-rank .pod-av{width:clamp(90px,7vw,160px);height:clamp(90px,7vw,160px)}
+  .board-rank .p1 .pod-col{height:clamp(180px,30vh,360px)}
+  .board-rank .p2 .pod-col{height:clamp(130px,22vh,270px)}
+  .board-rank .p3 .pod-col{height:clamp(100px,16vh,200px)}
+  .board-rank .pod-name{font-size:clamp(22px,1.8vw,40px)}
+  .board-rank .pod-pts{font-size:clamp(16px,1.3vw,28px)}
+  .board-rank .rank-list li{font-size:clamp(20px,1.5vw,34px);padding:1.2vh 1vw}
+}
+@media (max-width:600px){
+  .board-head{gap:10px;padding:14px 12px 0}
+  .board-emblem{width:72px}
+  .board-title{font-size:26px}
+  .board-rank{padding:6px 10px 30px}
+  .board-rank .podium{gap:8px;margin-top:30px}
+  .board-rank .pod-name{font-size:14px}
+}
+
+/* host loading frame (prevents the drawn host flashing before yours) */
+.avatar.is-pending{background:radial-gradient(circle at 50% 40%,#2a2c9a,#0b0c3e 70%);position:relative}
+.avatar.is-pending::after{content:"";position:absolute;inset:0;margin:auto;width:46px;height:46px;border-radius:50%;
+  background:conic-gradient(from 0deg,var(--purple),var(--pink),var(--peach),transparent 75%);
+  -webkit-mask:radial-gradient(circle,transparent 16px,#000 17px);mask:radial-gradient(circle,transparent 16px,#000 17px);animation:spin 1s linear infinite}
