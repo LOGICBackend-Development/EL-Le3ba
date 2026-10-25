@@ -102,8 +102,14 @@ export function cleanSlots(slots, uid) {
   }
   return out;
 }
+// occupancy doc = { slots: {cid:[teams playing]}, queue: {cid:[teams waiting at the station, in order]} }
+export const readOcc = (snap, uid = null) => {
+  const d = snap && snap.exists() ? snap.data() : {};
+  return { slots: cleanSlots(d.slots, uid), queue: cleanSlots(d.queue, uid) };
+};
 
-// Put a team into a free challenge it hasn't played. Never more than `sets` teams per challenge.
+// Send the team to its next station (following its route). If the station is full, the team waits there
+// (queued) and can listen to the host, but the timer only unlocks when a set is free.
 export async function allocate(uid, settings, challenges) {
   const active = challenges.filter((c) => c.active !== false);
   return runTransaction(db, async (tx) => {
@@ -115,39 +121,59 @@ export async function allocate(uid, settings, challenges) {
     const done = t.done || [];
     const remaining = active.filter((c) => !done.includes(c.id));
     if (!remaining.length) { tx.update(tRef, { finished: true }); return "finished"; }
-    const slots = cleanSlots(oS.exists() ? oS.data().slots : {}, uid);
+    const { slots, queue } = readOcc(oS, uid);
     const cap = Math.max(1, Number(settings.sets) || 1);
-    const free = remaining.filter((c) => (slots[c.id] || []).length < cap);
-    let pick = null;
+    const load = (id) => (slots[id] || []).length + (queue[id] || []).length;
     const route = (t.route || []).filter((id) => remaining.some((c) => c.id === id));
-    if (route.length) {
-      // follow the team's planned route; next planned challenge first
-      const planned = remaining.find((c) => c.id === route[0]);
-      if (planned && (slots[planned.id] || []).length < cap) pick = planned;
-      else if (settings.routeStrict === false && free.length) {
-        const pos = (id) => { const i = route.indexOf(id); return i < 0 ? 999 : i; };
-        pick = free.slice().sort((a, b) => pos(a.id) - pos(b.id))[0];  // flexible: next free one in route order
-      } else return "wait";
-    } else {
-      if (!free.length) return "wait";
-      const minLoad = Math.min(...free.map((c) => (slots[c.id] || []).length));
-      const pool = free.filter((c) => (slots[c.id] || []).length === minLoad);
+    let pick = route.length ? remaining.find((c) => c.id === route[0]) : null;
+    if (!pick) {                                   // no route: least crowded station
+      const min = Math.min(...remaining.map((c) => load(c.id)));
+      const pool = remaining.filter((c) => load(c.id) === min);
       pick = pool[Math.floor(Math.random() * pool.length)];
     }
-    if (!pick) return "wait";
-    slots[pick.id] = [...(slots[pick.id] || []), uid];
-    tx.set(oRef, { slots });
+    const canPlay = (slots[pick.id] || []).length < cap && !(queue[pick.id] || []).length;
+    if (canPlay) slots[pick.id] = [...(slots[pick.id] || []), uid];
+    else queue[pick.id] = [...(queue[pick.id] || []), uid];
+    tx.set(oRef, { slots, queue });
     tx.update(tRef, {
       current: {
         cid: pick.id, phase: "intro", attempt: 1, elapsedMs: 0, prevElapsedMs: 0, startedAt: null,
         limitMs: (Number(settings.challengeMinutes) || 12) * 60000, pausedBySession: false, submissionId: null,
+        queued: !canPlay, queuedAt: canPlay ? null : Date.now(),
       },
     });
+    return canPlay ? "ok" : "queued";
+  });
+}
+
+// A waiting team takes a set as soon as one is free (first come, first served).
+export async function claimSlot(uid, settings) {
+  return runTransaction(db, async (tx) => {
+    const tRef = doc(db, "teams", uid), oRef = doc(db, "state", "occupancy");
+    const tS = await tx.get(tRef);
+    const oS = await tx.get(oRef);
+    const cur = tS.data()?.current;
+    if (!cur || !cur.queued) return "no";
+    const { slots, queue } = readOcc(oS);
+    const cap = Math.max(1, Number(settings.sets) || 1);
+    const playing = (slots[cur.cid] || []).filter((x) => x !== uid);
+    let q = queue[cur.cid] || [];
+    if (!q.includes(uid)) q = [...q, uid];                  // repair: make sure we're in line
+    const freeSets = cap - playing.length;
+    if (freeSets <= 0 || q.indexOf(uid) >= freeSets) {
+      if (q !== queue[cur.cid]) { queue[cur.cid] = q; tx.set(oRef, { slots, queue }); }
+      return "wait";
+    }
+    slots[cur.cid] = [...playing, uid];
+    queue[cur.cid] = q.filter((x) => x !== uid);
+    if (!queue[cur.cid].length) delete queue[cur.cid];
+    tx.set(oRef, { slots, queue });
+    tx.update(tRef, { "current.queued": false, "current.queuedAt": null });
     return "ok";
   });
 }
 
-// Close the team's current challenge (pass or fail) and free its slot.
+// Close the team's current challenge (pass or fail) and free its set.
 export async function finishChallenge(uid, { passed, points = 0, totalMs = 0, expectCid = null }) {
   return runTransaction(db, async (tx) => {
     const tRef = doc(db, "teams", uid), oRef = doc(db, "state", "occupancy");
@@ -156,7 +182,7 @@ export async function finishChallenge(uid, { passed, points = 0, totalMs = 0, ex
     if (!tS.exists()) return false;
     const t = tS.data(), cur = t.current;
     if (!cur || (expectCid && cur.cid !== expectCid)) return false;
-    const slots = cleanSlots(oS.exists() ? oS.data().slots : {}, uid);
+    const { slots, queue } = readOcc(oS, uid);
     const done = Array.from(new Set([...(t.done || []), cur.cid]));
     const upd = {
       current: null, done,
@@ -170,7 +196,7 @@ export async function finishChallenge(uid, { passed, points = 0, totalMs = 0, ex
       upd.totalTimeMs = (t.totalTimeMs || 0) + totalMs;
     }
     tx.update(tRef, upd);
-    tx.set(oRef, { slots });
+    tx.set(oRef, { slots, queue });
     return true;
   });
 }

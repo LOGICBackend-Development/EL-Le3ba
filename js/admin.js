@@ -3,7 +3,7 @@ import {
   auth, db, firebaseConfig, ADMIN_EMAIL, teamEmail, fmt, elapsedOf, finishChallenge, cleanSlots,
   blobToB64, b64ToBlob, writeChunks, readChunks, deleteChunks, esc, toast, beep, pointsFor,
   DEFAULT_SETTINGS, DEFAULT_CHALLENGES, TEAM_COLORS, compressImage, loadHostPhoto, DEFAULT_MOUTH, makeRoutes, getMediaBlobUrl,
-  authErrorText,
+  authErrorText, readOcc,
 } from "./common.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
@@ -21,6 +21,7 @@ const sRef = doc(db, "settings", "game");
 const STATUS = { lobby: "لوبي", running: "شغّالة", paused: "واقفة", ended: "خلصت" };
 const PHASE = { intro: "بيسمع الرسالة", playing: "بيلعب", pending: "مستني الحكم", retry: "فرصة أخيرة (لسه مبدأش)" };
 
+let occQ = {};
 let settings = null, teams = {}, presence = {}, challenges = [], creds = {}, subs = [], occ = {};
 let unsubs = [], timerInt = null, firstSubs = true, settingsDirty = false;
 const seenSubs = new Set(), mediaUrls = new Map(), loadingMedia = new Set(), busy = new Set();
@@ -84,7 +85,7 @@ function subscribe() {
   }));
   unsubs.push(onSnapshot(collection(db, "teams"), (s) => {
     teams = {}; s.docs.forEach((d) => { teams[d.id] = { id: d.id, ...d.data() }; });
-    renderControl(); renderTeamsTab();
+    renderControl(); renderTeamsTab(); checkOccupancy();
   }));
   unsubs.push(onSnapshot(collection(db, "presence"), (s) => {
     presence = {}; s.docs.forEach((d) => { presence[d.id] = d.data().lastSeen?.toMillis?.() || 0; });
@@ -98,7 +99,7 @@ function subscribe() {
     creds = {}; s.docs.forEach((d) => { creds[d.id] = d.data(); });
     renderTeamsTab(); renderControl();
   }));
-  unsubs.push(onSnapshot(doc(db, "state", "occupancy"), (s) => { occ = s.data()?.slots || {}; renderControl(); }));
+  unsubs.push(onSnapshot(doc(db, "state", "occupancy"), (s) => { occ = s.data()?.slots || {}; occQ = s.data()?.queue || {}; renderControl(); checkOccupancy(); }));
   unsubs.push(onSnapshot(query(collection(db, "submissions"), where("status", "==", "pending")), onSubs));
   timerInt = setInterval(() => { updateTimers(); }, 1000);
 }
@@ -131,7 +132,8 @@ function renderControl() {
     const ids = occ[c.id] || [];
     return `<div class="station ${ids.length >= cap ? "full" : ids.length ? "busy" : ""}">
       <div class="st-top"><b>${esc(c.name)}</b><span>${ids.length}/${cap}</span></div>
-      <small>${ids.map((id) => esc(teams[id]?.name || "؟")).join("، ") || "فاضي"}</small></div>`;
+      <small>${ids.map((id) => esc(teams[id]?.name || "؟")).join("، ") || "فاضي"}</small>
+      ${(occQ[c.id] || []).length ? `<small class="q">🚶 ${tr("مستنيين:")} ${(occQ[c.id] || []).map((id) => esc(teams[id]?.name || "؟")).join("، ")}</small>` : ""}</div>`;
   }).join("");
 
   try { renderTracking(); } catch (e) { console.error("tracking", e); }
@@ -155,6 +157,7 @@ function cardHtml(t) {
   let state;
   if (t.finished) state = "خلّص كل التحديات 🏁";
   else if (!cur) state = settings.status === "lobby" ? "في اللوبي" : "مستني تحدي يفضى";
+  else if (cur.queued) state = `<b>${esc(ch?.name || "؟")}</b> · 🚶 ${tr("مستني المحطة تفضى")}`;
   else state = `<b>${esc(ch?.name || "؟")}</b> · ${tr(PHASE[cur.phase] || cur.phase)}${cur.attempt > 1 && cur.phase !== "retry" ? ` · ${tr("فرصة أخيرة")}` : ""}`;
   return `<div class="tcard ${cur?.phase === "pending" ? "pending" : ""}" style="--c:${t.color || "#888"}">
     <div class="tc-top"><i class="odot ${isOnline(t.id) ? "on" : ""}"></i><b class="tc-name">${esc(t.name)}</b><span class="tc-score">${t.score || 0}${t.adjust ? `<small class="adj">${t.adjust > 0 ? "+" : ""}${t.adjust}</small>` : ""}</span></div>
@@ -197,7 +200,7 @@ $("#btnResetS").onclick = async () => {
   teamList().forEach((t) => b.update(doc(db, "teams", t.id), {
     score: 0, totalTimeMs: 0, done: [], results: {}, current: null, finished: false, adjust: 0, adjustLog: [],
   }));
-  b.set(doc(db, "state", "occupancy"), { slots: {} });
+  b.set(doc(db, "state", "occupancy"), { slots: {}, queue: {} });
   b.update(sRef, { status: "lobby" });
   await b.commit();
   await Promise.all(subs.map(removeSubmission));
@@ -224,7 +227,7 @@ async function resetTeam(id) {
   await runTransaction(db, async (tx) => {
     const oRef = doc(db, "state", "occupancy");
     const o = await tx.get(oRef);
-    tx.set(oRef, { slots: cleanSlots(o.exists() ? o.data().slots : {}, id) });
+    tx.set(oRef, readOcc(o, id));
     tx.update(doc(db, "teams", id), { score: 0, totalTimeMs: 0, done: [], results: {}, current: null, finished: false, adjust: 0, adjustLog: [] });
   });
 }
@@ -546,7 +549,7 @@ $("#teamRows").addEventListener("click", async (e) => {
   await runTransaction(db, async (tx) => {
     const oRef = doc(db, "state", "occupancy");
     const o = await tx.get(oRef);
-    tx.set(oRef, { slots: cleanSlots(o.exists() ? o.data().slots : {}, id) });
+    tx.set(oRef, readOcc(o, id));
     tx.delete(doc(db, "teams", id));
     tx.delete(doc(db, "credentials", id));
     tx.delete(doc(db, "presence", id));
@@ -862,8 +865,7 @@ function renderTracking() {
   const name = (id) => esc(chal(id)?.name || "؟");
   const hasRoutes = list.length && list.every((t) => t.route && t.route.length);
   $("#trackInfo").textContent = !hasRoutes ? tr("المسارات لسه متعملتش — هتتعمل لوحدها لما تدوس ابدأ، أو دوس الزرار.")
-    : settings.routeStrict === false ? tr("عدد الفرق أكبر من التحديات × الـ Sets — لو التحدي الجاي مشغول الفريق بياخد أقرب تحدي فاضي.")
-    : tr("كل فريق بيمشي على مساره بالترتيب. لو التحدي الجاي لسه مشغول، الفريق بيستنى لحد ما يفضى.");
+    : tr("المسار ده هو الترتيب المقترح. لو التحدي الجاي مشغول، الفريق بياخد أول تحدي فاضي على طول — مفيش انتظار.");
   // team × round
   let h = `<thead><tr><th>${tr("الفريق")}</th>${Array.from({ length: n }, (_, i) => `<th>${tr("راوند {n}", { n: i + 1 })}</th>`).join("")}<th>${tr("النقط")}</th></tr></thead><tbody>`;
   list.forEach((t) => {
@@ -999,3 +1001,44 @@ $("#loopCard").addEventListener("click", async (e) => {
     } catch (err) { console.error(err); toast("مش قادرين نشغّل الـ VN", "bad"); }
   }
 });
+
+/* ================= SELF-REPAIR of challenge slots ================= */
+// If a slot holds a team that isn't really in that challenge (or a playing team is missing from its slot),
+// rebuild the slots from the teams' real state. Re-checked inside a transaction, so it can't undo a fresh match.
+let occTimer = null;
+function occMismatch() {
+  for (const [cid, ids] of Object.entries(occ)) for (const id of ids || []) { const c = teams[id]?.current; if (c?.cid !== cid || c.queued) return true; }
+  for (const [cid, ids] of Object.entries(occQ)) for (const id of ids || []) { const c = teams[id]?.current; if (c?.cid !== cid || !c.queued) return true; }
+  for (const t of Object.values(teams)) {
+    const c = t.current; if (!c?.cid) continue;
+    if (!c.queued && !(occ[c.cid] || []).includes(t.id)) return true;
+    if (c.queued && !(occQ[c.cid] || []).includes(t.id)) return true;
+  }
+  return false;
+}
+function checkOccupancy() {
+  clearTimeout(occTimer);
+  if (!settings || settings.status === "lobby" || !occMismatch()) return;
+  occTimer = setTimeout(async () => {
+    if (!occMismatch()) return;
+    try {
+      const fixed = await runTransaction(db, async (tx) => {
+        const oRef = doc(db, "state", "occupancy");
+        await tx.get(oRef);
+        const ids = Object.keys(teams);
+        const snaps = await Promise.all(ids.map((id) => tx.get(doc(db, "teams", id))));
+        const slots = {}, waiting = {};
+        snaps.forEach((sn, i) => {
+          const cur = sn.data()?.current; if (!cur?.cid) return;
+          if (cur.queued) (waiting[cur.cid] = waiting[cur.cid] || []).push({ id: ids[i], at: cur.queuedAt || 0 });
+          else (slots[cur.cid] = slots[cur.cid] || []).push(ids[i]);
+        });
+        const queue = {};
+        for (const [cid, arr] of Object.entries(waiting)) queue[cid] = arr.sort((a, b) => a.at - b.at).map((x) => x.id);
+        tx.set(oRef, { slots, queue });
+        return true;
+      });
+      if (fixed) console.info("occupancy repaired");
+    } catch (e) { console.warn("occupancy repair", e); }
+  }, 4000);
+}

@@ -2,7 +2,7 @@ import { t as tr } from "./i18n.js";
 import {
   auth, db, ADMIN_EMAIL, teamEmail, fmt, elapsedOf, allocate, finishChallenge,
   blobToB64, b64ToBlob, writeChunks, readChunks, esc, toast, beep, compressImage, rankSort, rankingHtml, loadHostPhoto, getMediaBlobUrl,
-  authErrorText,
+  authErrorText, claimSlot,
 } from "./common.js";
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
@@ -119,6 +119,11 @@ function announce() {
     showResult(r.status === "passed", r.points || 0, name);
   }
   const pc = prevTeam.current, nc = team.current;
+  if (pc && nc && pc.cid === nc.cid && pc.queued && !nc.queued) {
+    toast(tr("✅ المحطة فضيت! تقدروا تبدأوا"), "good");
+    [660, 880, 1100].forEach((f, i) => setTimeout(() => beep(f, 0.12, 0.18), i * 140));
+    navigator.vibrate?.([150, 80, 150]);
+  }
   if (pc && nc && pc.phase === "pending" && nc.phase === "retry" && pc.cid === nc.cid) {
     toast("الدليل اترفض ❌ معاكم فرصة أخيرة", "warn"); beep(330, 0.3);
   }
@@ -163,8 +168,10 @@ function go(name, key = name) {
   refresh(name);
 }
 
+let waitTimer = null;
 function leave() {
   clearInterval(tickTimer); tickTimer = null;
+  clearInterval(waitTimer); waitTimer = null;
   if (occUnsub) { occUnsub(); occUnsub = null; }
   closeTheater();
   avatar.stop();
@@ -177,9 +184,14 @@ function enter(name) {
     case "lobby": mountAvatar("#avLobby"); break;
     case "wait":
       $("#waitMsg").textContent = "بنجهزلكم التحدي الجاي";
-      occUnsub = onSnapshot(doc(db, "state", "occupancy"), () => setTimeout(tryAllocate, Math.random() * 700));
+      occUnsub = onSnapshot(doc(db, "state", "occupancy"), () => setTimeout(tryAllocate, Math.random() * 400));
+      waitTimer = setInterval(tryAllocate, 3000);   // don't rely only on live updates (mobile data)
       break;
-    case "intro": setupIntro(); break;
+    case "intro":
+      setupIntro();
+      occUnsub = onSnapshot(doc(db, "state", "occupancy"), (snap) => { occNow = snap.data() || {}; showInside(); setTimeout(tryClaim, Math.random() * 300); });
+      waitTimer = setInterval(tryClaim, 3000);
+      break;
     case "playing": setupPlaying(); break;
     case "retry":
       $("#retryName").textContent = chal(team.current.cid)?.name || "";
@@ -194,7 +206,7 @@ function refresh(name) {
   switch (name) {
     case "lobby": $("#lobbyTeam").textContent = team.name || ""; refreshWelcome(); break;
     case "wait": tryAllocate(); break;
-    case "intro": setTitles(); updateStartBtn(); break;
+    case "intro": setTitles(); updateStartBtn(); showInside(); break;
     case "retry": setTitles(); $("#btnRetry").disabled = settings.status !== "running"; break;
     case "playing": setTitles(); tick(); break;
     case "done": $("#doneScore").textContent = team.score || 0; $("#doneList").innerHTML = resultsHtml(); break;
@@ -247,6 +259,7 @@ async function tryAllocate() {
   try {
     const r = await allocate(uid, settings, challenges);
     if (r === "wait") $("#waitMsg").textContent = "كل التحديات مشغولة دلوقتي… أول ما تحدي يفضى هتدخلوه على طول";
+    if (r === "ok" || r === "queued" || r === "finished") resync();   // show the next station right away
   } catch (e) { console.error(e); }
   finally { allocating = false; }
 }
@@ -336,9 +349,38 @@ function closeTheater() {
 $("#thClose").onclick = () => closeTheater();
 
 function updateStartBtn() {
-  const ok = heard && settings?.status === "running";
+  const queued = !!team?.current?.queued;
+  const ok = heard && settings?.status === "running" && !queued;
   $("#btnStart").disabled = !ok;
-  $("#introHint").textContent = !heard ? "لازم تسمعوا الرسالة الأول" : settings?.status !== "running" ? "اللعبة واقفة" : "الوقت هيبدأ أول ما تدوسوا";
+  $("#introTag").textContent = queued ? tr("🚶 روحوا على المحطة") : tr("التحدي الجاي");
+  $("#introTag").classList.toggle("warn", queued);
+  $("#stationBusy").hidden = !queued;
+  $("#introHint").textContent = queued ? tr("الوقت هيتفتح أول ما المحطة تفضى")
+    : !heard ? tr("لازم تسمعوا الرسالة الأول") : settings?.status !== "running" ? tr("اللعبة واقفة") : tr("الوقت هيبدأ أول ما تدوسوا");
+}
+
+/* ---- waiting at a busy station ---- */
+const nameCache = {};
+let claiming = false, occNow = null;
+async function tryClaim() {
+  const cur = team?.current;
+  if (!cur?.queued || claiming || settings?.status !== "running") return;
+  claiming = true;
+  try { const r = await claimSlot(uid, settings); if (r === "ok") resync(); } catch (e) { console.warn(e); }
+  finally { claiming = false; }
+}
+async function showInside() {
+  const cur = team?.current; if (!cur?.queued || !occNow) return;
+  const ids = (occNow.slots || {})[cur.cid] || [];
+  const names = await Promise.all(ids.map(async (id) => {
+    if (!nameCache[id]) { try { nameCache[id] = (await getDoc(doc(db, "teams", id))).data()?.name || "?"; } catch { nameCache[id] = "?"; } }
+    return nameCache[id];
+  }));
+  const q = ((occNow.queue || {})[cur.cid] || []).indexOf(uid);
+  $("#stationBusyText").textContent = ids.length
+    ? tr("{names} لسه جوه التحدي. استنوا عند المحطة واسمعوا الرسالة.", { names: names.join(" · ") })
+    : tr("المحطة بتفضى دلوقتي…");
+  $("#stationQueue").textContent = q > 0 ? tr("قدامكم {n} فريق في الدور", { n: q }) : "";
 }
 
 $("#btnStart").onclick = () => startTimer("intro");
@@ -346,7 +388,7 @@ $("#btnRetry").onclick = () => startTimer("retry");
 
 async function startTimer(fromPhase) {
   const cur = team?.current;
-  if (!cur || cur.phase !== fromPhase || settings.status !== "running") return;
+  if (!cur || cur.phase !== fromPhase || settings.status !== "running" || cur.queued) return;
   $("#btnStart").disabled = true; $("#btnRetry").disabled = true;
   avatar.stop();
   await countdown();
@@ -619,7 +661,7 @@ setInterval(() => {
   if (document.hidden || !team) return;
   if (settings?.status === "lobby" && syncTick % 2) return;   // lobby: every 10 s is enough
   const ph = team.current?.phase;
-  if (ph === "pending" || (!team.current && settings?.status === "running" && !team.finished) || settings?.status === "lobby") resync();
+  if (ph === "pending" || team.current?.queued || (!team.current && settings?.status === "running" && !team.finished) || settings?.status === "lobby") resync();
 }, 5000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) resync(); });
 window.addEventListener("online", resync);

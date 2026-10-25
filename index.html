@@ -75,8 +75,12 @@
   <!-- INTRO: host + voice note -->
   <section class="screen" id="scr-intro" hidden>
     <div class="hero">
-      <div class="hero-top"><span class="chip">التحدي الجاي</span><span class="qpill js-prog">1/6</span></div>
+      <div class="hero-top"><span class="chip" id="introTag">التحدي الجاي</span><span class="qpill js-prog">1/6</span></div>
       <h1 class="ch-title" id="introName"></h1>
+      <div class="station-busy" id="stationBusy" hidden>
+        <div class="sb-ic">⏳</div>
+        <div><b id="stationBusyText"></b><small id="stationQueue"></small></div>
+      </div>
       <div class="stage" id="avIntro"></div>
       <p class="hero-desc" id="introDesc"></p>
     </div>

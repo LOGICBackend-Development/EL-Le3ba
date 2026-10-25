@@ -392,3 +392,10 @@ html:not(.i18n-ready) body{visibility:hidden}
 .loop-prev{width:100%;aspect-ratio:16/9;border-radius:12px;background:#000;object-fit:cover}
 .loop-prev[hidden]{display:block!important;visibility:hidden}
 @media (max-width:600px){.loop-grid{grid-template-columns:1fr}}
+
+/* waiting at a busy station */
+.station-busy{display:flex;gap:12px;align-items:center;margin:4px 0 10px;padding:12px 14px;border-radius:18px;background:rgba(255,181,71,.12);border:1px solid rgba(255,181,71,.45)}
+.station-busy .sb-ic{font-size:28px;animation:bob 2s ease-in-out infinite}
+.station-busy b{display:block;font-size:15px;line-height:1.5}
+.station-busy small{display:block;color:#ffd79a;margin-top:2px}
+.station small.q{color:#ffd79a}
