@@ -485,3 +485,7 @@ html:not(.i18n-ready) body{visibility:hidden}
 .avatar.is-pending::after{content:"";position:absolute;inset:0;margin:auto;width:46px;height:46px;border-radius:50%;
   background:conic-gradient(from 0deg,var(--purple),var(--pink),var(--peach),transparent 75%);
   -webkit-mask:radial-gradient(circle,transparent 16px,#000 17px);mask:radial-gradient(circle,transparent 16px,#000 17px);animation:spin 1s linear infinite}
+
+/* first viewing of a challenge message: nothing to tap */
+.theater.must-watch .th-stage,.theater.must-watch video{pointer-events:none}
+.theater.must-watch .th-top .chip::after{content:" · ▶";opacity:.7}

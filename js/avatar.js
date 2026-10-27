@@ -259,6 +259,7 @@ const SILENCE = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfA
 let unlocked = false;
 export function unlockAudio() {           // call inside a tap/click
   if (unlocked) return;
+  if (player.src && player.src !== SILENCE && !player.paused) { unlocked = true; return; }   // a message is playing: never interrupt it
   try { player.src = SILENCE; const r = player.play(); if (r && r.then) r.then(() => { unlocked = true; }).catch(() => {}); } catch { /* ignore */ }
 }
 export const isAudioUnlocked = () => unlocked;
@@ -456,11 +457,12 @@ export function createAvatar({ pending = false } = {}) {
       applyLife(now || performance.now(), amp);
       raf = requestAnimationFrame(loop);
     };
-    const finish = () => { stop(); done && done(); };
+    // only a real end of THIS message counts as "watched"
+    const finish = () => { if (p.src !== url) return; stop(); done && done(); };
     p.onended = finish;
-    p.onerror = () => { console.warn("audio error", p.error); stop(); done && done("error"); };
+    p.onerror = () => { if (p.src !== url) return; console.warn("audio error", p.error); stop(); done && done("error"); };
     const pr = p.play();
-    if (pr && pr.then) pr.then(() => loop(performance.now())).catch((err) => {
+    if (pr && pr.then) pr.then(() => { unlocked = true; loop(performance.now()); }).catch((err) => {
       console.warn(err); stop();
       if (err && err.name === "NotAllowedError" && onBlocked) onBlocked(); else done && done("error");
     });

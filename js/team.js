@@ -357,19 +357,23 @@ function playChallengeMessage() {
   if (!introMedia) return;
   stopAuto();
   const ch = chal(team?.current?.cid);
+  const first = !heard;
   openTheater(introMedia, ch?.name || "", () => {
     heard = true;
+    theaterMust = false; $("#thClose").hidden = false; $("#theater").classList.remove("must-watch");
     $("#btnPlayVN").textContent = tr("↻ اسمعوها تاني");
     showEndCard("challenge");
     updateStartBtn();
-  });
+  }, first);
 }
 
 /* ---- full-screen theater ---- */
-let theaterDone = null, theaterMedia = null, endKind = null;
-function openTheater(media, title, onDone) {
+let theaterDone = null, theaterMedia = null, endKind = null, theaterMust = false;
+function openTheater(media, title, onDone, mustWatch = false) {
   const th = $("#theater"), vid = $("#thVideo");
-  theaterDone = onDone; theaterMedia = media;
+  theaterDone = onDone; theaterMedia = media; theaterMust = mustWatch;
+  $("#thClose").hidden = mustWatch;                 // first viewing: no way to skip
+  th.classList.toggle("must-watch", mustWatch);
   $("#thName").textContent = title;
   $("#thEnd").hidden = true; $("#thTap").hidden = true;
   th.hidden = false;
@@ -381,7 +385,11 @@ function openTheater(media, title, onDone) {
   const blocked = () => { $("#thTap").hidden = false; };
   if (media.kind === "video") {
     vid.hidden = false; vid.muted = false; vid.src = media.url; vid.currentTime = 0;
+    vid.controls = false; vid.disablePictureInPicture = true;
     vid.onended = () => finished();
+    // no seeking ahead on the first viewing
+    let maxT = 0;
+    vid.ontimeupdate = () => { if (!theaterMust) return; if (vid.currentTime > maxT + 1.5) vid.currentTime = maxT; else maxT = Math.max(maxT, vid.currentTime); };
     vid.onerror = () => finished("error");
     vid.play().catch((e) => { console.warn(e); if (e.name === "NotAllowedError") blocked(); else finished("error"); });
   } else {
@@ -394,13 +402,14 @@ function openTheater(media, title, onDone) {
 $("#thTapBtn").onclick = () => {
   unlockAudio();
   $("#thTap").hidden = true;
-  if (theaterMedia) openTheater(theaterMedia, $("#thName").textContent, theaterDone);
+  if (theaterMedia) openTheater(theaterMedia, $("#thName").textContent, theaterDone, theaterMust);
 };
 function closeTheater() {
   const th = $("#theater"), vid = $("#thVideo");
   if (th.hidden) return;
   theaterDone = null; theaterMedia = null; endKind = null;
-  vid.onended = null; vid.onerror = null; vid.pause(); vid.removeAttribute("src"); vid.load(); vid.controls = false;
+  vid.onended = null; vid.onerror = null; vid.ontimeupdate = null; vid.pause(); vid.removeAttribute("src"); vid.load(); vid.controls = false;
+  theaterMust = false; $("#thClose").hidden = false; th.classList.remove("must-watch");
   avatar.stop();
   th.hidden = true; $("#thEnd").hidden = true; $("#thTap").hidden = true;
   if (curKey && curKey.startsWith("intro")) mountAvatar("#avIntro");
