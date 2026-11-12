@@ -489,3 +489,10 @@ html:not(.i18n-ready) body{visibility:hidden}
 /* first viewing of a challenge message: nothing to tap */
 .theater.must-watch .th-stage,.theater.must-watch video{pointer-events:none}
 .theater.must-watch .th-top .chip::after{content:" · ▶";opacity:.7}
+
+/* change station */
+.mv-list{display:flex;flex-direction:column;gap:8px;margin:12px 0}
+.mv-item{font:inherit;color:#fff;text-align:start;border:1px solid var(--line);background:rgba(255,255,255,.06);border-radius:16px;padding:12px 14px;cursor:pointer;display:flex;flex-direction:column;gap:2px}
+.mv-item:hover{border-color:var(--pink)}
+.mv-item small{color:var(--mut)}
+.mv-item.full{border-color:rgba(255,77,106,.4)}

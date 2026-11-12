@@ -166,6 +166,8 @@ function cardHtml(t) {
     <div class="tc-row"><span class="tc-timer" data-timer="${t.id}"></span><span class="mut small">${tr("{a}/{b} تحدي", { a: (t.done || []).length, b: activeChallenges().length })}</span></div>
     <div class="tc-actions">
       ${cur ? `<button class="btn btn-sm btn-ghost" data-act="skip" data-id="${t.id}">تخطي التحدي</button>` : ""}
+      ${cur && ["playing", "retry", "pending"].includes(cur.phase) ? `<button class="btn btn-sm btn-ghost" data-act="resetTimer" data-id="${t.id}">⏱ ${tr("ريست الوقت")}</button>` : ""}
+      ${!t.finished && settings?.status !== "lobby" ? `<button class="btn btn-sm btn-ghost" data-act="move" data-id="${t.id}">🔀 ${tr("غيّر المحطة")}</button>` : ""}
       <button class="btn btn-sm btn-ghost" data-act="score" data-id="${t.id}">✎ ${tr("النقط")}</button>
       <button class="btn btn-sm btn-ghost" data-act="resetTeam" data-id="${t.id}">ريست الفريق</button>
       <button class="btn btn-sm btn-ghost danger" data-act="kick" data-id="${t.id}" title="${esc(tr("خروج الفريق ده"))}">🚪</button>
@@ -221,6 +223,23 @@ $("#teamGrid").addEventListener("click", async (e) => {
   const b = e.target.closest("button[data-act]"); if (!b) return;
   const t = teams[b.dataset.id]; if (!t) return;
   if (b.dataset.act === "score") { openScore(t.id); return; }
+  if (b.dataset.act === "move") { openMove(t.id); return; }
+  if (b.dataset.act === "resetTimer") {
+    const cur = t.current, last = (cur?.attempt || 1) > 1;
+    const mins = last ? Number(settings.retryMinutes) || 2 : Number(settings.challengeMinutes) || 12;
+    if (!confirm(tr("ريست وقت {name}؟ الوقت هيرجع {m} دقيقة ويبدأ من الأول.", { name: t.name, m: mins }))) return;
+    await Promise.all(subs.filter((s) => s.teamId === t.id).map(removeSubmission));
+    await runTransaction(db, async (tx) => {
+      const r = doc(db, "teams", t.id), sn = await tx.get(r), c = sn.data()?.current;
+      if (!c || !["playing", "retry", "pending"].includes(c.phase)) return;
+      const live = settings.status === "running";
+      tx.update(r, {
+        "current.phase": "playing", "current.elapsedMs": 0, "current.limitMs": mins * 60000,
+        "current.startedAt": live ? Date.now() : null, "current.pausedBySession": !live, "current.submissionId": null,
+      });
+    });
+    toast(tr("وقت {name} اتعمله ريست ✓", { name: t.name }), "good"); return;
+  }
   if (b.dataset.act === "kick") {
     if (!confirm(tr("خروج {name} من الموبايل بتاعهم؟ هيقدروا يدخلوا تاني باليوزر والباسورد.", { name: t.name }))) return;
     await updateDoc(doc(db, "teams", t.id), { kickAt: Date.now() });
@@ -1093,3 +1112,67 @@ $("#btnFixAudio").onclick = async () => {
   b.disabled = false; b.textContent = tr("🔧 خلّي كل الـ VNs تشتغل على كل الموبايلات");
   toast(tr("اتصلّح {n} VN ✓", { n: ok }), "good");
 };
+
+/* ================= CHANGE A TEAM'S STATION ================= */
+let moveTeam = null;
+function openMove(id) {
+  const t = teams[id]; if (!t) return;
+  moveTeam = id;
+  const cap = Math.max(1, Number(settings.sets) || 1);
+  const curId = t.current?.cid;
+  $("#mvName").textContent = t.name;
+  $("#mvNow").textContent = curId ? tr("دلوقتي: {c}", { c: chal(curId)?.name || "؟" }) : tr("مستني تحدي");
+  const left = activeChallenges().filter((c) => !(t.done || []).includes(c.id) && c.id !== curId);
+  $("#mvList").innerHTML = left.length ? left.map((c) => {
+    const inside = (occ[c.id] || []).filter((x) => x !== id), waitN = (occQ[c.id] || []).filter((x) => x !== id).length;
+    const full = inside.length >= cap;
+    const who = inside.map((x) => esc(teams[x]?.name || "؟")).join("، ");
+    return `<button type="button" class="mv-item ${full ? "full" : ""}" data-cid="${c.id}">
+      <b>${esc(c.name)}</b><small>${full ? `🔴 ${tr("مشغول")}: ${who}` : `🟢 ${tr("فاضي")}`}${waitN ? ` · 🚶 ${waitN}` : ""}</small></button>`;
+  }).join("") : `<p class="mut center">${tr("مفيش تحديات تانية فاضلة للفريق ده")}</p>`;
+  $("#moveModal").hidden = false;
+}
+$("#mvClose").onclick = () => { $("#moveModal").hidden = true; };
+$("#moveModal").addEventListener("click", async (e) => {
+  if (e.target === $("#moveModal")) { $("#moveModal").hidden = true; return; }
+  const it = e.target.closest(".mv-item"); if (!it) return;
+  const id = moveTeam, t = teams[id], cid = it.dataset.cid;
+  const cap = Math.max(1, Number(settings.sets) || 1);
+  const inside = (occ[cid] || []).filter((x) => x !== id);
+  let swapWith = null;
+  if (inside.length >= cap) {
+    const other = inside.map((x) => teams[x]).find((o) => o && t.current?.cid && !(o.done || []).includes(t.current.cid));
+    if (other && confirm(tr("{c} مشغول بـ {o}. تبدّلهم؟ ({o} هيروح على محطة {name})", { c: chal(cid)?.name, o: other.name, name: t.name }))) swapWith = other.id;
+    else if (!confirm(tr("المحطة مشغولة. {name} يروح يستنى في الدور؟", { name: t.name }))) return;
+  } else if (!confirm(tr("نقل {name} لـ {c}؟ التحدي الحالي هيتلغي ويبدأ الجديد من الأول.", { name: t.name, c: chal(cid)?.name }))) return;
+  $("#moveModal").hidden = true;
+  const movers = swapWith ? [id, swapWith] : [id];
+  await Promise.all(subs.filter((s) => movers.includes(s.teamId)).map(removeSubmission));
+  try {
+    await runTransaction(db, async (tx) => {
+      const oRef = doc(db, "state", "occupancy"), tRef = doc(db, "teams", id);
+      const oS = await tx.get(oRef), tS = await tx.get(tRef);
+      const sRefO = swapWith ? doc(db, "teams", swapWith) : null, sS = sRefO ? await tx.get(sRefO) : null;
+      let { slots, queue } = readOcc(oS, id);
+      const fresh = (c, queued) => ({
+        cid: c, phase: "intro", attempt: 1, elapsedMs: 0, prevElapsedMs: 0, startedAt: null,
+        limitMs: (Number(settings.challengeMinutes) || 12) * 60000, pausedBySession: false, submissionId: null,
+        queued, queuedAt: queued ? Date.now() : null,
+      });
+      const oldCid = tS.data()?.current?.cid || null;
+      if (swapWith && oldCid) {
+        ({ slots, queue } = readOcc({ exists: () => true, data: () => ({ slots, queue }) }, swapWith));
+        slots[cid] = [...(slots[cid] || []), id];
+        slots[oldCid] = [...(slots[oldCid] || []), swapWith];
+        tx.update(sRefO, { current: fresh(oldCid, false) });
+        tx.update(tRef, { current: fresh(cid, false) });
+      } else {
+        const free = (slots[cid] || []).length < cap && !(queue[cid] || []).length;
+        if (free) slots[cid] = [...(slots[cid] || []), id]; else queue[cid] = [...(queue[cid] || []), id];
+        tx.update(tRef, { current: fresh(cid, !free) });
+      }
+      tx.set(oRef, { slots, queue });
+    });
+    toast(swapWith ? tr("اتبدّلوا ✓") : tr("{name} راح على {c} ✓", { name: t.name, c: chal(cid)?.name }), "good");
+  } catch (err) { console.error(err); toast("حصلت مشكلة… جرب تاني", "bad"); }
+});

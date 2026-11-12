@@ -328,7 +328,9 @@ async function preloadMedia() {
   preloading = false;
 }
 
-let introMedia = null;
+let introMedia = null, mediaReady = false;
+const MAX_REPLAYS = 2;
+let replaysLeft = MAX_REPLAYS;
 let introPending = false;
 async function setupIntro() {
   const key = curKey, cur = team.current, ch = chal(cur.cid);
@@ -336,9 +338,9 @@ async function setupIntro() {
   if (!ch) { introPending = true; return; }            // challenge list not loaded yet — try again when it arrives
   introPending = false;
   mountAvatar("#avIntro");
-  heard = false; introMedia = null; stopAuto();
+  heard = false; introMedia = null; mediaReady = false; replaysLeft = MAX_REPLAYS; stopAuto();
   const btnPlay = $("#btnPlayVN");
-  btnPlay.hidden = false; btnPlay.disabled = true; btnPlay.textContent = tr("⏳ بنحمّل الرسالة…");
+  btnPlay.hidden = true;                                 // replay button appears only after the first viewing
   updateStartBtn();
   let media = null;
   try {
@@ -347,11 +349,22 @@ async function setupIntro() {
     if (!media) { const a = await getMediaUrl(cur.cid, "audio"); media = a ? { kind: "audio", url: a } : null; }
   } catch (e) { console.error(e); }
   if (key !== curKey) return;
-  if (!media) { btnPlay.hidden = true; heard = true; updateStartBtn(); return; }
+  mediaReady = true;
+  if (!media) { heard = true; updateStartBtn(); return; }   // no message → Start goes straight to the timer
   introMedia = media;
-  btnPlay.disabled = false; btnPlay.textContent = tr("▶ اسمعوا الرسالة");
-  btnPlay.onclick = () => playChallengeMessage();
-  playChallengeMessage();                               // plays by itself
+  btnPlay.onclick = () => replayMessage();
+  updateStartBtn();
+  playChallengeMessage();                               // plays by itself on arrival
+}
+function replayMessage() {
+  if (!heard || replaysLeft <= 0) return;
+  replaysLeft--;
+  playChallengeMessage();
+}
+function renderReplay() {
+  const left = replaysLeft, txt = left > 0 ? tr("↻ اسمعوها تاني ({n} باقي)", { n: left }) : tr("خلصت مرات الإعادة");
+  [$("#btnPlayVN"), $("#thAgain")].forEach((b) => { b.textContent = txt; b.disabled = left <= 0; });
+  $("#btnPlayVN").hidden = !heard || !introMedia;
 }
 function playChallengeMessage() {
   if (!introMedia) return;
@@ -361,7 +374,7 @@ function playChallengeMessage() {
   openTheater(introMedia, ch?.name || "", () => {
     heard = true;
     theaterMust = false; $("#thClose").hidden = false; $("#theater").classList.remove("must-watch");
-    $("#btnPlayVN").textContent = tr("↻ اسمعوها تاني");
+    renderReplay();
     showEndCard("challenge");
     updateStartBtn();
   }, first);
@@ -421,6 +434,7 @@ function showEndCard(kind) {
   endKind = kind;
   $("#thEnd").hidden = false;
   if (kind === "welcome") {
+    $("#thAgain").textContent = tr("↻ اسمعوها تاني"); $("#thAgain").disabled = false;
     $("#thEndRing").hidden = true;
     $("#thEndTitle").textContent = tr("جاهزين؟");
     $("#thEndMsg").textContent = tr("اللعبة هتبدأ أول ما المنظّم يدي الإشارة.");
@@ -436,9 +450,10 @@ $("#thGo").onclick = () => {
   stopAuto(); closeTheater(); startTimer("intro", true);
 };
 $("#thAgain").onclick = () => {
+  if ($("#thAgain").disabled) return;
   stopAuto();
   if (endKind === "welcome") playWelcome();
-  else playChallengeMessage();
+  else replayMessage();
 };
 
 /* ---- 10-second auto start after the message ---- */
@@ -482,14 +497,17 @@ $("#thClose").onclick = () => closeTheater();
 
 function updateStartBtn() {
   const queued = !!team?.current?.queued;
-  const ok = heard && settings?.status === "running" && !queued;
+  const running = settings?.status === "running";
+  const ok = running && !queued && heard;
   $("#btnStart").disabled = !ok;
+  $("#btnStart").textContent = !mediaReady && !heard ? tr("⏳ بنحمّل الرسالة…") : tr("يلا نبدأ ⏱");
   $("#introTag").textContent = queued ? tr("🚶 روحوا على المحطة") : tr("التحدي الجاي");
   $("#introTag").classList.toggle("warn", queued);
   $("#stationBusy").hidden = !queued;
   if (heard && !queued && settings?.status === "running" && team?.current?.phase === "intro") startAuto(); else renderAuto();
   $("#introHint").textContent = queued ? tr("الوقت هيتفتح أول ما المحطة تفضى")
-    : !heard ? tr("لازم تسمعوا الرسالة الأول") : settings?.status !== "running" ? tr("اللعبة واقفة") : tr("الوقت هيبدأ أول ما تدوسوا");
+    : settings?.status !== "running" ? tr("اللعبة واقفة")
+    : !heard && introMedia ? tr("لازم تسمعوا الرسالة الأول") : tr("الوقت هيبدأ أول ما تدوسوا");
 }
 
 /* ---- waiting at a busy station ---- */
@@ -534,7 +552,11 @@ async function showInside() {
   $("#stationQueue").textContent = q > 0 ? tr("قدامكم {n} فريق في الدور", { n: q }) : "";
 }
 
-$("#btnStart").onclick = () => startTimer("intro");
+$("#btnStart").onclick = () => {
+  if (team?.current?.queued || settings?.status !== "running") return;
+  if (!heard) return;
+  startTimer("intro");
+};
 $("#btnRetry").onclick = () => startTimer("retry");
 
 async function startTimer(fromPhase, skipCountdown = false) {
