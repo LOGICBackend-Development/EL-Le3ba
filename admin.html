@@ -103,8 +103,10 @@
           <label class="sm">عدد الفرق<input id="teamCount" type="number" min="1" max="40" value="6"></label>
           <button id="btnGenTeams" class="btn btn-red">جهّز الفرق</button>
           <button id="btnPrint" class="btn btn-ghost">🖨 اطبع كروت الدخول</button>
+          <button id="btnDelTeams" class="btn btn-ghost danger">🗑 مسح كل الفرق</button>
         </div>
-        <p class="mut small">بيعمل حسابات جديدة لحد ما يوصل للعدد ده. الحسابات الموجودة بتفضل زي ما هي.</p>
+        <p class="mut small">بيعمل الفرق لحد ما يوصل للعدد ده، وبيبدأ الترقيم من team01. الفرق الموجودة بتفضل زي ما هي.</p>
+        <p class="warn-note" id="blockedNote" hidden></p>
       </div>
       <div class="table-wrap">
         <table class="tbl">

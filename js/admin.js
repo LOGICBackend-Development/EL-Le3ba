@@ -598,46 +598,73 @@ $("#teamRows").addEventListener("click", async (e) => {
     const o = await tx.get(oRef);
     tx.set(oRef, readOcc(o, id));
     tx.delete(doc(db, "teams", id));
-    tx.delete(doc(db, "credentials", id));
+    tx.set(doc(db, "credentials", id), { spare: true }, { merge: true });   // keep the login so team0X can be reused
     tx.delete(doc(db, "presence", id));
   });
 });
+
+$("#btnDelTeams").onclick = async () => {
+  const list = teamList();
+  if (!list.length) return;
+  if (!confirm(tr("مسح كل الفرق ({n})؟ النقط والنتايج هتتمسح. اليوزرات (team01…) هتتستخدم تاني لما تجهّز فرق جديدة.", { n: list.length }))) return;
+  await Promise.all(subs.map(removeSubmission));
+  const b = writeBatch(db);
+  list.forEach((t) => {
+    b.delete(doc(db, "teams", t.id));
+    b.set(doc(db, "credentials", t.id), { spare: true }, { merge: true });
+    b.delete(doc(db, "presence", t.id));
+  });
+  b.set(doc(db, "state", "occupancy"), { slots: {}, queue: {} });
+  await b.commit();
+  toast(tr("كل الفرق اتمسحت ✓"), "good");
+};
 
 $("#btnGenTeams").onclick = async () => {
   const target = Math.min(40, Math.max(1, Number($("#teamCount").value) || 0));
   const have = Object.keys(teams).length;
   if (have >= target) { toast(tr("عندك {n} فرق بالفعل", { n: have }), "warn"); return; }
   const btn = $("#btnGenTeams"); btn.disabled = true;
-  const used = new Set([...Object.values(creds).map((c) => c.username), ...Object.values(teams).map((t) => t.username)]);
+  const active = new Set(Object.values(teams).map((t) => t.username));
+  const spares = {};                                   // username -> { uid, password }
+  for (const [uid, c] of Object.entries(creds)) if (!teams[uid] && c.username && c.password) spares[c.username] = { uid, password: c.password };
   const sa = getSecAuth();
   let created = 0, idx = 0;
+  const blocked = [];
   try {
     while (have + created < target && idx < 200) {
       idx++;
       const username = `team${String(idx).padStart(2, "0")}`;
-      if (used.has(username)) continue;
-      const password = genPwd();
-      let tuid;
-      try {
-        tuid = (await createUserWithEmailAndPassword(sa, teamEmail(username), password)).user.uid;
-      } catch (err) {
-        if (err.code === "auth/email-already-in-use") continue;
-        throw err;
+      if (active.has(username)) continue;
+      let tuid, password;
+      if (spares[username]) {                          // reuse the old login
+        ({ uid: tuid, password } = spares[username]);
+      } else {
+        password = genPwd();
+        try {
+          tuid = (await createUserWithEmailAndPassword(sa, teamEmail(username), password)).user.uid;
+          await signOut(sa);
+        } catch (err) {
+          if (err.code === "auth/email-already-in-use") { blocked.push(username); continue; }
+          throw err;
+        }
       }
-      await signOut(sa);
       await setDoc(doc(db, "teams", tuid), {
         name: tr("فريق {n}", { n: idx }), username, color: TEAM_COLORS[(idx - 1) % TEAM_COLORS.length],
         score: 0, totalTimeMs: 0, done: [], results: {}, current: null, finished: false, createdAt: serverTimestamp(),
       });
-      await setDoc(doc(db, "credentials", tuid), { username, password });
+      await setDoc(doc(db, "credentials", tuid), { username, password, spare: false, fac: "", facPhone: "" });
       created++;
       btn.textContent = tr("بيجهّز… {a}/{b}", { a: have + created, b: target });
     }
     toast(tr("اتعمل {n} فريق ✓", { n: created }), "good");
+    if (blocked.length) {
+      $("#blockedNote").hidden = false;
+      $("#blockedNote").innerHTML = tr("⚠️ اليوزرات دي اتعملت قبل التحديث ومش قادرين نستخدمها تاني: <b>{list}</b>. امسحهم مرة واحدة من Firebase → Authentication → Users (ابحث بـ team) وبعدين دوس «جهّز الفرق» تاني عشان الترقيم يبدأ من team01.", { list: blocked.join("، ") });
+    } else $("#blockedNote").hidden = true;
   } catch (err) {
     console.error(err);
     toast(err.code === "auth/operation-not-allowed" ? "فعّل Email/Password في Firebase Authentication" : tr("حصلت مشكلة: {e}", { e: err.code || err.message }), "bad");
-  } finally { btn.disabled = false; btn.textContent = "جهّز الفرق"; }
+  } finally { btn.disabled = false; btn.textContent = tr("جهّز الفرق"); }
 };
 
 $("#btnPrint").onclick = () => {

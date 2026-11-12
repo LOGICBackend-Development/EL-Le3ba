@@ -496,3 +496,5 @@ html:not(.i18n-ready) body{visibility:hidden}
 .mv-item:hover{border-color:var(--pink)}
 .mv-item small{color:var(--mut)}
 .mv-item.full{border-color:rgba(255,77,106,.4)}
+
+.warn-note{margin:8px 0 0;padding:10px 12px;border-radius:12px;background:rgba(255,181,71,.12);border:1px solid rgba(255,181,71,.45);color:#ffd79a;font-size:13px;line-height:1.7}
